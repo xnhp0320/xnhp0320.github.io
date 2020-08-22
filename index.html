@@ -1,14 +1,16 @@
 <!DOCTYPE html>
 <html><head>
+	<meta name="generator" content="Hugo 0.63.1" />
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Peng He&#39;s blog">
     
     <link rel="shortcut icon" href="https://xnhp0320.github.io/favicon.ico">
+    <link rel="alternate" type="application/rss+xml" href="https://xnhp0320.github.io/index.xml" title="漂浮的思绪">
     
     <link rel="stylesheet" href="/css/style.min.css">
 
-    <title></title>
+    <title>漂浮的思绪</title>
 </head>
 <body><header id="banner">
     <h2><a href="https://xnhp0320.github.io">漂浮的思绪</a></h2>
@@ -27,19 +29,205 @@
     </nav>
 </header>
 <main id="content">
-<article>
-    <header id="post-header">
-        <h1></h1></header><h1 id="网络虚拟化的一种本质">网络虚拟化的一种本质</h1>
-<p>做虚拟网络也有几年了，最近产生了一些想法，就想着记下来。</p>
-<p>我记得在读书的时候，搞过一阵子未来网络的体系结构。当时看了一些资料，记得有一个RFC曾经指出了IPv4网络设计的一个局限性，就是把identify（标识）和 location（寻址）的绑定在同一个IP地址上。这个论断，当时看还是很震惊的，感觉非常精辟。怎么理解这个论断呢，其实标识就是名字，说白了就是你是谁，寻址的话也很好理解，就是你在哪。在网络世界里，如果两个IP地址很接近，比如前缀相等，那么你可以认为他可能就在同一个交换机下，这其实就是一种对位置的界定。</p>
-<p>在静态网络中，这种绑定其实没有什么问题。但是一旦网络中的个体开始移动，问题就来了，比如一个客户端，具有某个IP<sub>1</sub>的client移动到了另一个位置，那么按照方便寻址的原则，他在另一个地方的地址应该是另一个地址IP<sub>2</sub>。但是如果client正处于一个TCP连接中，换掉地址，就相当于五元组变了，那么连接就被破坏，相当于断网。为了一个新的地址，直接丢弃了所有老连接，这就很麻烦。为了解决这些，我记得移动网络中有一个所谓的“三角路由”的概念。具体是啥也忘记了。但是这个寻址和标识的绑定是IPv4网络的局限性的论断，这么多年我都记得。为了解除这个问题，Cisco曾经提出了一个叫LISP，Location Identification Separate Protocol，就是把IP地址分为两类，一类作为标识，一类作为地址，网络中的设备都有两个地址，直接解除了IPv4的这一局限性。可惜当前的互联网已经不可能重来了。</p>
-<p>那么这个标识和寻址的绑定和网络虚拟化有啥关系呢？其实之前我在做的时候，也没想过有啥关系。网络虚拟化本质就是overlay技术，说白了就是一个underlay多个overlay。打个隧道连通下各个主机，隧道的目的是为了防止地址overlap，overlay网络中要尽可能的模拟现有的网络，比如二层泛洪，三层路由等等。直到我见到了纯三层虚拟网络，我突然想明白了点什么。</p>
-<p>纯三层的虚拟网络里，每个虚机都是/32的掩码，也就是每个虚机自身就是一个子网。任何两个虚机之间的互访就是三层路由。这固然有些限制，比如二层设备里一些基于arp欺骗的主备网络设备的玩法搞不了了，但是对于大多数业务来说，基本没影响。而且，这个限制对虚拟网络的设计来说其实省了一大堆的事情，比如arp在虚拟网络中的泛洪，虚机迁移之后的免费arp发布刷cache等等。</p>
-<p>当然这个设计中最重要的一点还是让我立刻理解了虚拟网络中地址已经和位置无关了。试想，两个虚机的IP地址前缀相同，能说明他就一定靠的很近吗？不，有可能这两个虚机在两个相隔甚远的物理机上。既然前缀已经不能决定位置了，干脆就放弃前缀，放弃了前缀就是放弃了虚拟子网，放弃了广播域，放弃了冲突域。虚机的标识就是IP地址，而这个IP地址与虚机的位置毫无关系。所以纯三层虚拟网络，就是暴露了虚拟网络的另一种本质。如果你看着一个vxlan数据包，他的外层IP地址负责寻址，而内层IP地址就是标识。Cisco想实现的LISP，在虚拟网络中实现了。历史总是惊人的相似！</p>
-<p>因而虚机的路由表在vswitch中是不能收敛的。每个虚机都会贡献一个路由表项到虚机，没有前缀路由，只有明细路由。因为去往每个虚机的下一跳都可能是不同的宿主机。一个有10w虚机的网络，路由表就有10w条。</p>
-<p>这和今天的互联网的骨干网何其类似。因为绑定了标识信息，骨干网络的route表项年年上升，我博士在读时候是350K条，现在貌似远超500K条了。看样子，IP查找算法的研究还可以再续命三年。</p>
-<p>那么除了这套玩法，我们还有别的玩法么？当然有，当我们不在意IP地址，而用URL来实现服务标识，玩法又变化了。这块下次再说吧，敲字有点累了。</p>
-</article>
+<h3>Posts</h3>
+<ul id="posts">
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E7%BD%91%E7%BB%9C%E8%99%9A%E6%8B%9F%E5%8C%96%E7%9A%84%E4%B8%80%E7%A7%8D%E6%9C%AC%E8%B4%A8/">网络虚拟化的一种本质<small><time>Aug 15, 2020</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E5%9B%9E%E5%88%B0%E9%9C%8D%E6%A0%BC%E6%B2%83%E8%8C%A8/">回到霍格沃茨<small><time>Jul 25, 2020</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E8%BF%94%E4%BA%AC/">返京<small><time>Apr 19, 2020</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E5%8F%88%E4%B8%8B%E9%9B%A8%E4%BA%86/">又下雨了<small><time>Mar 27, 2020</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/probabilities-and-packet-classification-i/">Probabilities and Packet Classification I<small><time>Mar 22, 2020</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E6%8A%80%E6%9C%AF/">技术<small><time>May 26, 2019</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E9%9D%9E%E7%BA%BF%E6%80%A7%E7%9A%84%E4%B8%96%E7%95%8C/">非线性的世界<small><time>May 18, 2019</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/write-something/">Write Something<small><time>Feb 4, 2019</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E6%B5%81%E8%B7%9F%E8%B8%AA%E7%B3%BB%E7%BB%9F%E4%B8%AD%E7%9A%84%E5%B9%B6%E5%8F%91%E8%AE%BE%E8%AE%A1%E6%8E%A2%E8%AE%A8/">流跟踪系统中的并发设计探讨<small><time>Feb 4, 2019</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E4%B8%B4%E6%97%B6%E5%8F%98%E9%87%8F/">临时变量<small><time>May 27, 2018</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E4%B8%80%E5%91%A8%E5%B7%A5%E7%A8%8B%E7%BB%8F%E9%AA%8C%E6%80%BB%E7%BB%930521~0525/">一周工程经验总结0521~0525<small><time>May 21, 2018</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E4%B8%80%E5%91%A8%E5%B7%A5%E7%A8%8B%E7%BB%8F%E9%AA%8C%E6%80%BB%E7%BB%9320180514~20190518/">一周工程经验总结20180514~20190518<small><time>May 18, 2018</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E4%B8%80%E5%91%A8%E5%B7%A5%E7%A8%8B%E7%BB%8F%E9%AA%8C%E6%80%BB%E7%BB%930507~0511/">一周工程经验总结0507~0511<small><time>May 11, 2018</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E4%B8%80%E4%BA%9B%E6%9C%89%E7%94%A8%E7%9A%84%E6%95%B0%E6%8D%AE/">一些有用的数据<small><time>May 6, 2018</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/carousel%E7%B3%BB%E7%BB%9F/">Carousel系统<small><time>May 6, 2018</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E5%A6%82%E4%BD%95%E7%94%A8c-%E5%AE%9E%E7%8E%B0golang%E4%B8%AD%E7%9A%84slice/">如何用C&#43;&#43;实现Golang中的slice？<small><time>Dec 9, 2017</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/golang%E7%9A%84%E4%B8%80%E4%B8%AA%E5%9D%91/">Golang的一个坑<small><time>Dec 9, 2017</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/poetic-moment/">poetic moment<small><time>Sep 3, 2017</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/silkroad%E7%9C%9F%E7%9A%84%E5%8F%AF%E4%BB%A5%E7%94%A8400%E8%A1%8C%E7%9A%84p4%E5%AE%9E%E7%8E%B0%E5%B8%A6%E7%8A%B6%E6%80%81lb%E5%90%97/">SilkRoad，真的可以用400行的p4实现带状态LB吗？<small><time>Sep 2, 2017</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/nfpenabling-network-function-parallelism-in-nfv/">NFP:Enabling Network Function Parallelism in NFV<small><time>Aug 27, 2017</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/nfv%E7%9A%84%E4%BB%B7%E5%80%BC%E5%9C%A8%E5%93%AA%E9%87%8C/">NFV的价值在哪里？<small><time>Aug 20, 2017</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E6%89%93%E9%80%A0opencontrail%E7%9A%84%E4%B8%80%E4%B8%AA%E5%BC%80%E5%8F%91%E6%B2%99%E7%9B%92sandbox/">打造OpenContrail的一个开发沙盒(sandbox)<small><time>Aug 20, 2017</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/go-%E8%AF%AD%E8%A8%80%E7%9A%84%E5%88%9D%E5%A7%8B%E5%8C%96/">Go 语言的初始化<small><time>Jul 26, 2017</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E4%BD%BF%E7%94%A8lark%E8%A7%A3%E6%9E%90%E5%B8%B8%E8%A7%81%E7%9A%84%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6/">使用Lark解析常见的配置文件<small><time>Jul 22, 2017</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E4%B8%B4%E6%97%B6%E5%8F%98%E9%87%8F/">临时变量？<small><time>Jul 17, 2017</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/c-%E5%80%BC%E7%9A%84%E5%88%86%E7%B1%BB/">C&#43;&#43;值的分类<small><time>Jul 16, 2017</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/c-%E5%88%9D%E5%A7%8B%E5%8C%96%E7%AC%94%E8%AE%B0/">C&#43;&#43;初始化笔记<small><time>Jul 14, 2017</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/folly-scopeguard.h-%E5%88%86%E6%9E%90/">folly ScopeGuard.h 分析<small><time>Jul 2, 2017</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/c-%E7%9A%84%E5%8F%B3%E5%80%BC%E5%BC%95%E7%94%A8%E7%9A%84%E5%87%A0%E4%B8%AA%E5%9D%91/">C&#43;&#43;的右值引用的几个坑<small><time>Apr 3, 2017</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E4%B8%80%E8%87%B4%E6%80%A7%E5%93%88%E5%B8%8C%E7%AE%97%E6%B3%95%E4%B8%80%E4%BA%9B%E8%AE%A4%E8%AF%86/">一致性哈希算法一些认识<small><time>Mar 3, 2017</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E5%AF%B9ip_vs%E4%B8%ADrcu%E9%94%81%E5%92%8Ctimer%E4%B9%8B%E9%97%B4%E7%9A%84%E7%AB%9E%E6%80%81%E5%85%B3%E7%B3%BB%E7%9A%84%E5%88%86%E6%9E%90/">对ip_vs中rcu锁和timer之间的竞态关系的分析<small><time>Oct 1, 2016</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E4%B9%A6%E5%BA%97/">书店<small><time>Aug 5, 2016</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/maglev%E4%B8%80%E8%87%B4%E6%80%A7%E5%93%88%E5%B8%8C%E8%A1%A5%E9%81%97/">Maglev一致性哈希（补遗）<small><time>Jun 28, 2016</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/maglev%E4%B8%AD%E7%9A%84%E4%B8%80%E8%87%B4%E6%80%A7%E5%93%88%E5%B8%8C%E7%AE%97%E6%B3%95/">Maglev中的一致性哈希算法<small><time>Jun 26, 2016</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E4%B8%80%E4%BA%9B%E6%84%9F%E6%83%B3/">一些感想<small><time>Apr 1, 2016</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E5%86%8D%E8%A7%812015/">再见，2015<small><time>Jan 16, 2016</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/hard-feelings/">Hard Feelings<small><time>Sep 4, 2015</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E7%A7%91%E7%A0%94%E7%9A%84%E6%95%85%E4%BA%8B/">科研的故事<small><time>Jun 13, 2015</time></small>
+        </a>
+    </li>
+
+    <li>
+        <a href="https://xnhp0320.github.io/%E6%89%BE%E5%88%B0%E4%B8%80%E4%B8%AA%E5%9C%B0%E6%96%B9%E5%86%99%E7%82%B9%E4%B8%9C%E8%A5%BF/">找到一个地方写点东西<small><time>Jun 13, 2015</time></small>
+        </a>
+    </li>
+
+</ul>
 
         </main><footer id="footer">
     Copyright © 2020 Floating Minds Peng He

@@ -8,7 +8,7 @@
     
     <link rel="stylesheet" href="/css/style.min.css">
 
-    <title>临时变量</title>
+    <title>临时变量？</title>
 </head>
 <body><header id="banner">
     <h2><a href="https://xnhp0320.github.io">漂浮的思绪</a></h2>
@@ -29,7 +29,8 @@
 <main id="content">
 <article>
     <header id="post-header">
-        <h1>临时变量</h1><time>May 27, 2018</time></header><p>去年分析过一个右值导致变量生存期变长的<a href="http://xnhp0320.github.io/2017/07/17/2017-7-17/">日志</a>，当时认为是对象生存期变长了，今天发现并不是如此，当时的小程序：</p>
+        <h1>临时变量？</h1><time>July 17, 2017</time></header><p>在2017-7-02的日志中存疑的地方在于，貌似folly库用了一种方法把所有的值都变成了左值引用。</p>
+<p>当时用了一个小程序来推测这个问题：</p>
 <div class="highlight"><pre class="chroma"><code class="language-cpp" data-lang="cpp"><span class="k">auto</span> <span class="nf">transform</span><span class="p">(</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">string</span> <span class="o">&amp;</span><span class="o">&amp;</span> <span class="n">a</span><span class="p">)</span>
 <span class="p">{</span>
   		<span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="o">&amp;</span><span class="n">a</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
@@ -44,51 +45,29 @@
   	<span class="n">r</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="sa"></span><span class="sc">&#39;</span><span class="sc">b</span><span class="sc">&#39;</span><span class="p">;</span>
     <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="n">r</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
 <span class="p">}</span>
-</code></pre></div><p>当时用的是一个临时的string对象<code>hahaa</code>，今天用了个更简单的对象：</p>
-<div class="highlight"><pre class="chroma"><code class="language-cpp" data-lang="cpp"><span class="cp">#</span><span class="cp">include</span> <span class="cpf">&lt;iostream&gt;</span><span class="cp">
-</span><span class="cp"></span><span class="cp">#</span><span class="cp">include</span> <span class="cpf">&lt;string&gt;</span><span class="cp">
-</span><span class="cp"></span><span class="cp">#</span><span class="cp">include</span> <span class="cpf">&lt;functional&gt;</span><span class="cp">
-</span><span class="cp"></span>
-<span class="k">struct</span> <span class="nc">B</span> <span class="p">{</span>
-
-    <span class="c1">//default ctor
-</span><span class="c1"></span>    <span class="n">B</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
-        <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="sa"></span><span class="s">&#34;</span><span class="s">B default </span><span class="s">&#34;</span> <span class="o">&lt;</span><span class="o">&lt;</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
-    <span class="p">}</span>
-    <span class="c1">//copy ctor
-</span><span class="c1"></span>    <span class="n">B</span><span class="p">(</span><span class="k">const</span> <span class="n">B</span><span class="o">&amp;</span><span class="p">)</span> <span class="p">{</span>
-        <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="sa"></span><span class="s">&#34;</span><span class="s">B copy </span><span class="s">&#34;</span> <span class="o">&lt;</span><span class="o">&lt;</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
-    <span class="p">}</span>
-
-    <span class="n">B</span><span class="o">&amp;</span> <span class="k">operator</span><span class="o">=</span><span class="p">(</span><span class="k">const</span> <span class="n">B</span><span class="o">&amp;</span><span class="p">)</span> <span class="p">{</span>
-        <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span> <span class="o">&lt;</span><span class="o">&lt;</span><span class="sa"></span><span class="s">&#34;</span><span class="s">B assign </span><span class="s">&#34;</span><span class="o">&lt;</span><span class="o">&lt;</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
-        <span class="k">return</span> <span class="o">*</span><span class="k">this</span><span class="p">;</span>
-    <span class="p">}</span>
-
-    <span class="n">B</span><span class="p">(</span><span class="n">B</span> <span class="o">&amp;</span><span class="o">&amp;</span><span class="p">)</span> <span class="p">{</span><span class="n">puts</span><span class="p">(</span><span class="sa"></span><span class="s">&#34;</span><span class="s">B(B&amp;&amp;)</span><span class="s">&#34;</span><span class="p">)</span><span class="p">;</span><span class="p">}</span>
-    <span class="n">B</span><span class="o">&amp;</span> <span class="k">operator</span><span class="o">=</span><span class="p">(</span><span class="n">B</span> <span class="o">&amp;</span><span class="o">&amp;</span><span class="p">)</span> <span class="p">{</span>
-        <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span> <span class="o">&lt;</span><span class="o">&lt;</span><span class="sa"></span><span class="s">&#34;</span><span class="s">B move </span><span class="s">&#34;</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
-        <span class="k">return</span> <span class="o">*</span><span class="k">this</span><span class="p">;</span>
-    <span class="p">}</span>
-
-    <span class="o">~</span><span class="n">B</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span> <span class="n">puts</span><span class="p">(</span><span class="sa"></span><span class="s">&#34;</span><span class="s">~B()</span><span class="s">&#34;</span><span class="p">)</span><span class="p">;</span><span class="p">}</span>
-<span class="p">}</span><span class="p">;</span>
-
-
-
-<span class="k">auto</span> <span class="nf">transform</span><span class="p">(</span><span class="n">B</span> <span class="o">&amp;</span><span class="o">&amp;</span> <span class="n">a</span><span class="p">)</span>
+</code></pre></div><p>实际上，这里&quot;hahaha&quot;是一个右值，而且会生成一个临时对象std::string，并用这个临时对象来初始化a，但是是否这个临时对象的生存期就在transform这个函数中呢？如果如此，那么该程序会core掉。</p>
+<p>实际上改成如下程序之后，程序确实core掉了：</p>
+<div class="highlight"><pre class="chroma"><code class="language-cpp" data-lang="cpp"><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">string</span> <span class="o">&amp;</span><span class="o">&amp;</span> <span class="n">make_string</span><span class="p">(</span><span class="p">)</span>
 <span class="p">{</span>
-    <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="o">&amp;</span><span class="n">a</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
-    <span class="k">return</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">ref</span><span class="p">(</span><span class="n">a</span><span class="p">)</span><span class="p">;</span>
+     <span class="k">return</span> <span class="sa"></span><span class="s">&#34;</span><span class="s">hahaha</span><span class="s">&#34;</span><span class="p">;</span>
 <span class="p">}</span>
-<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="p">)</span>
+
+<span class="k">auto</span> <span class="nf">transform</span><span class="p">(</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">string</span> <span class="o">&amp;</span><span class="o">&amp;</span> <span class="n">a</span><span class="p">)</span>
 <span class="p">{</span>
-    <span class="k">auto</span> <span class="n">a</span> <span class="o">=</span> <span class="n">transform</span><span class="p">(</span><span class="n">B</span><span class="p">(</span><span class="p">)</span><span class="p">)</span><span class="p">;</span>
-    <span class="n">B</span> <span class="o">&amp;</span><span class="n">r</span> <span class="o">=</span> <span class="n">a</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="p">)</span><span class="p">;</span>
-    <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="o">&amp;</span><span class="n">r</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
+  		<span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="o">&amp;</span><span class="n">a</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
+  	 	<span class="k">return</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">ref</span><span class="p">(</span><span class="n">a</span><span class="p">)</span><span class="p">;</span>
 <span class="p">}</span>
-</code></pre></div><p>结果发现，确实在transform函数调用完之后，B()就析构了。</p>
-<p>之前看到的程序没有core掉，有可能是那段内存并没有被回收而已。</p>
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="p">)</span> 
+<span class="p">{</span>
+
+ 	<span class="k">auto</span> <span class="n">a</span> <span class="o">=</span> <span class="n">transform</span><span class="p">(</span><span class="n">make_string</span><span class="p">(</span><span class="p">)</span><span class="p">)</span><span class="p">;</span>
+   	<span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">string</span> <span class="o">&amp;</span><span class="n">r</span> <span class="o">=</span> <span class="n">a</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="p">)</span><span class="p">;</span>
+   	<span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="o">&amp;</span><span class="n">r</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
+<span class="p">}</span>
+
+
+</code></pre></div><p>因此事情的本质在于，对象的生存期是否被延长了？而不是左值右值的变化，实际上变来变去都无所谓，只要所指向的对象还活着，都没有问题。C++只是禁止用一个临时对象初始化给一个非const引用，但是实际上有很多种方法可以绕开这种语法检查，而做到操作临时变量的内存，在stackoverflow上有很多人提出了更简单的方法避开这种语法检查，所以没有必要纠结于细节。</p>
+<p>我因此怀疑，实际上&quot;hahaha&quot;这个临时对象的生存期是在main函数中，而非transform函数中的。</p>
 </article>
 
         </main><footer id="footer">
