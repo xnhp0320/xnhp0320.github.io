@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Peng He&#39;s blog">
+    
+    <link rel="shortcut icon" href="https://xnhp0320.github.io/favicon.ico">
+    
+    <link rel="stylesheet" href="/css/style.min.css">
+
+    <title>Golang的一个坑</title>
+</head>
+<body><header id="banner">
+    <h2><a href="https://xnhp0320.github.io">漂浮的思绪</a></h2>
+    <nav>
+        <ul>
+            
+            <li>
+                <a href="/" title="posts">posts</a>
+            </li>
+            
+            <li>
+                <a href="/about/" title="about">about</a>
+            </li>
+            
+        </ul>
+    </nav>
+</header>
+<main id="content">
+<article>
+    <header id="post-header">
+        <h1>Golang的一个坑</h1><time>December 9, 2017</time></header><p>试着输入以下代码：</p>
+<pre><code>package main
+
+import &quot;fmt&quot;
+import &quot;sync&quot;
+
+func main() {
+	a := make([]int, 5)
+	var wg sync.WaitGroup
+	wg.Add(5)
+	for i, j := range a {
+		go func() {
+			fmt.Println(i, j)
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+}
+</code></pre><p>你觉得输出是啥？</p>
+</article>
+
+        </main><footer id="footer">
+    Copyright © 2020 Floating Minds Peng He
+</footer>
+</body>
+</html>

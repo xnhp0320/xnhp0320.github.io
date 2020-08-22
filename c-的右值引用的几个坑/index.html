@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Peng He&#39;s blog">
+    
+    <link rel="shortcut icon" href="https://xnhp0320.github.io/favicon.ico">
+    
+    <link rel="stylesheet" href="/css/style.min.css">
+
+    <title>C&#43;&#43;的右值引用的几个坑</title>
+</head>
+<body><header id="banner">
+    <h2><a href="https://xnhp0320.github.io">漂浮的思绪</a></h2>
+    <nav>
+        <ul>
+            
+            <li>
+                <a href="/" title="posts">posts</a>
+            </li>
+            
+            <li>
+                <a href="/about/" title="about">about</a>
+            </li>
+            
+        </ul>
+    </nav>
+</header>
+<main id="content">
+<article>
+    <header id="post-header">
+        <h1>C&#43;&#43;的右值引用的几个坑</h1><time>April 3, 2017</time></header><ul>
+<li>有名字的一定是左值；能取地址的一定是左值。这一点最坑：</li>
+</ul>
+<p><code>int &amp;&amp; a = 1;</code></p>
+<p>请问a是左值还是右值？a有名字，因此a是左值，a是一个右值引用，a和1
+绑定。</p>
+<pre><code>int i = 0;
+int &amp;&amp; a = i+1;
+</code></pre><p>a是一个右值引用，指向一个临时对象，那么a是右值么？不是，是左值，而且可以对a取地址。</p>
+<p><code>std::cout &lt;&lt; &amp;a &lt;&lt; std::endl;</code></p>
+<ul>
+<li>T&amp;&amp; 有时候是右值引用类型，有时候是<a href="https://isocpp.org/blog/2012/11/universal-references-in-c11-scott-meyers">universal reference</a></li>
+</ul>
+<p>什么意思？因为C++给T&amp;&amp;开了特例，允许给T&amp;&amp;传入一个左值，并根据折叠规则(T&amp;&amp; &amp; = T&amp; T&amp;&amp; &amp;&amp; = T&amp;&amp;)进行类型推断。因此T&amp;&amp;是万能的reference，即universal reference。对universal reference有一个判断标准：</p>
+<blockquote>
+<p>If a variable or parameter is declared to have type T&amp;&amp; for some deduced type T, that variable or parameter is a universal reference.</p>
+</blockquote>
+<p>什么意思？如果一个变量或者函数的形参T&amp;&amp;需要类型推导，那么他一定是universal reference。举个栗子：</p>
+<pre><code>template &lt; typename T &gt;	
+void fuck(T&amp;&amp; t) {}
+</code></pre><p>这个t是universal reference，因为他什么都接，可以是左值，也可以是右值，但是根据上一条规则，<strong>t本身是一个左值</strong>!</p>
+<p>但是我们把他模板特化：</p>
+<p><code>fuck&lt;int&gt;()；</code></p>
+<p>此时T=int，模板为：
+void fuck(int &amp;&amp; t)</p>
+<p>该函数只能接收右值。也就是说移动构造函数是对的，因为移动构造函数长这个样子：</p>
+<pre><code>class Fuck {	
+	 Fuck(Fuck &amp;&amp;)
+}
+</code></pre><p>此时类型是固定的，不需要推导，因此只能接收右值。t是一个右值引用，而且t是左值。</p>
+<p>OK，有了以上这些规则之后来看这个诡异的代码：</p>
+<ul>
+<li>诡异的重载</li>
+</ul>
+<pre><code>template &lt; typename T &gt;
+void fuck(T &amp;f) {	
+    std::cout &lt;&lt; &quot;lvalue&quot; &lt;&lt;std::endl;
+}
+
+template &lt;typename T&gt;
+void fuck(T &amp;&amp;f) {
+    std::cout &lt;&lt; &quot;rvalue&quot; &lt;&lt;std::endl;
+}
+
+template &lt;typename T&gt;
+void superfuck(T &amp;&amp;f) {
+	 fuck(f);
+}
+
+void main()
+{
+    int a;
+    superfuck(a);
+    superfuck(1);
+}
+</code></pre><p>请问这两个函数调用会输出哪个结果？答案都是lvalue。根据第一条规则，有名字的都是左值，在superfuck内f是一个左值，类型为T&amp;，导致fuck函数只能接收左值。有的人说T&amp;&amp; f是universal reference啥都能收，也是candidate，此处是为了精确匹配。</p>
+<p>那如果将引用改一个会如何？把第一个重载模板改成const T &amp;f，会怎样？</p>
+<pre><code>template &lt; typename T &gt;
+void fuck(const T &amp;f) {	
+    std::cout &lt;&lt; &quot;lvalue&quot; &lt;&lt;std::endl;
+}
+
+template &lt;typename T&gt;
+void fuck(T &amp;&amp;f) {
+    std::cout &lt;&lt; &quot;rvalue&quot; &lt;&lt;std::endl;
+}
+
+template &lt;typename T&gt;
+void superfuck(T &amp;&amp;f) {
+	 fuck(f);
+}
+
+void main()
+{
+    int a;
+    superfuck(a);
+    superfuck(1);
+}
+</code></pre><p>答案是输出全部变成了右值！为啥？因为模板匹配的时候优先考虑没有const的candidate，此时universal reference版本变成了较好的版本。参见<a href="http://en.cppreference.com/w/cpp/language/overload_resolution">overload reference</a>。本身传入的是一个非const的左值，这样通过模板推导出来的fuck(T &amp;f)更精确一些，因此会选择输出右值的函数。</p>
+<pre><code>int f(const int &amp;); // overload #1
+int f(int &amp;);       // overload #2 (both references)
+int g(const int &amp;); // overload #1
+int g(int);         // overload #2
+int i;
+int j = f(i); // lvalue i -&gt; int&amp; is better 
+              //than lvalue int -&gt; const int&amp;
+              // calls f(int&amp;)
+int k = g(i); // lvalue i -&gt; const int&amp; ranks Exact Match
+              // lvalue i -&gt; rvalue int ranks Exact Match
+              // ambiguous overload: compilation error
+</code></pre><p>是不是很崩溃？</p>
+</article>
+
+        </main><footer id="footer">
+    Copyright © 2020 Floating Minds Peng He
+</footer>
+</body>
+</html>

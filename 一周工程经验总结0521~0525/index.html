@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Peng He&#39;s blog">
+    
+    <link rel="shortcut icon" href="https://xnhp0320.github.io/favicon.ico">
+    
+    <link rel="stylesheet" href="/css/style.min.css">
+
+    <title>一周工程经验总结0521~0525</title>
+</head>
+<body><header id="banner">
+    <h2><a href="https://xnhp0320.github.io">漂浮的思绪</a></h2>
+    <nav>
+        <ul>
+            
+            <li>
+                <a href="/" title="posts">posts</a>
+            </li>
+            
+            <li>
+                <a href="/about/" title="about">about</a>
+            </li>
+            
+        </ul>
+    </nav>
+</header>
+<main id="content">
+<article>
+    <header id="post-header">
+        <h1>一周工程经验总结0521~0525</h1><time>May 21, 2018</time></header><ol>
+<li>vifo和uio驱动在open的时候，会自发的reset pci设备。这个叫FLR，Function Level Reset，这会导致网卡VF进入reset状态，dpdk需要在进入时等待reset完成，否则会出现vf初始化失败。</li>
+</ol>
+</article>
+
+        </main><footer id="footer">
+    Copyright © 2020 Floating Minds Peng He
+</footer>
+</body>
+</html>

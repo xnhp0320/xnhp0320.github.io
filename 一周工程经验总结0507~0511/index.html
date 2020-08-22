@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Peng He&#39;s blog">
+    
+    <link rel="shortcut icon" href="https://xnhp0320.github.io/favicon.ico">
+    
+    <link rel="stylesheet" href="/css/style.min.css">
+
+    <title>一周工程经验总结0507~0511</title>
+</head>
+<body><header id="banner">
+    <h2><a href="https://xnhp0320.github.io">漂浮的思绪</a></h2>
+    <nav>
+        <ul>
+            
+            <li>
+                <a href="/" title="posts">posts</a>
+            </li>
+            
+            <li>
+                <a href="/about/" title="about">about</a>
+            </li>
+            
+        </ul>
+    </nav>
+</header>
+<main id="content">
+<article>
+    <header id="post-header">
+        <h1>一周工程经验总结0507~0511</h1><time>May 11, 2018</time></header><ol>
+<li>
+<p>wrk在测试并发的时候，并不是如他结果所显示的那样，在1s内打出了几万个并发连接。通常情况下，<code>-c</code>后面接的数字是并发的数量，一般只有几百而已。wrk在测试中，以循环的形式，每次打开<code>-c</code>个连接，发起GET请求后，立马关闭所有socket，统计一秒钟完成的socket数量。</p>
+</li>
+<li>
+<p>因此，单个连接完成的速度会制约wrk在1s内完成的全部的连接的数量，因而，网络速度慢或者拥塞，也会限制最终wrk所能导致的并发连接数。这一点并不直观。</p>
+</li>
+<li>
+<p>encap类数据包处理程序，最好在收包之后，对数据包的headroom前64字节做一次预取。有DDIO技术，数据包的payload在DMA之后，直接进入CPU缓存。但是ENCAP会在数据包前面加入包头，这导致持续的Cache miss在encap时。</p>
+</li>
+<li>
+<p>URCU在做synchronize_rcu时，有一个类似于call batching的技巧: 即把调用时间上比较相近的synchronize_rcu的调用，用一个concurrent stack存起来，始终让栈顶的那个线程等待其他线程进入静默时区，而让其他的线程等待在futex调用上。等待完成后，栈顶线程会通过futex唤醒其他所有的线程让他们均完成各自的synchronize_rcu调用。</p>
+</li>
+<li>
+<p>在使用全局变量做多线程之间的一些同步原语时，最好使用URCU中的一套CMM*的宏，可能更科学一些。</p>
+</li>
+<li>
+<p>一个好用的http proxy，polipo，在代理git时，有时候会因为内存不足导致无法git clone。此时需要将他的内存使用量调大一点，chunkhighmark=128 * 1024 * 1024。</p>
+</li>
+</ol>
+</article>
+
+        </main><footer id="footer">
+    Copyright © 2020 Floating Minds Peng He
+</footer>
+</body>
+</html>

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Peng He&#39;s blog">
+    
+    <link rel="shortcut icon" href="https://xnhp0320.github.io/favicon.ico">
+    
+    <link rel="stylesheet" href="/css/style.min.css">
+
+    <title>一致性哈希算法一些认识</title>
+</head>
+<body><header id="banner">
+    <h2><a href="https://xnhp0320.github.io">漂浮的思绪</a></h2>
+    <nav>
+        <ul>
+            
+            <li>
+                <a href="/" title="posts">posts</a>
+            </li>
+            
+            <li>
+                <a href="/about/" title="about">about</a>
+            </li>
+            
+        </ul>
+    </nav>
+</header>
+<main id="content">
+<article>
+    <header id="post-header">
+        <h1>一致性哈希算法一些认识</h1><time>March 3, 2017</time></header><p>当负载均衡后端服务器数量发生变化时，可能会导致本该发给RS<sub>1</sub>的数据包发送到RS<sub>2</sub>。此时有两种解决方案：1）采用session，记录建立的连接选择的后端服务器。2）采用一致性哈希，一致性哈希可以保证当后端服务器数量发生变化时，分配给连接已经建立的数据包的后端不会发生变化。</p>
+<h3 id="经典一致性哈希算法">经典一致性哈希算法</h3>
+<p>经典一致性哈希算法将哈希空间看成一个环，每条流被哈希成环上的一个单点。此时将RS也哈希到环上，这些RS对应的点将哈希环分拆成几个部分，通过某种规则将各个部分分配给不同的点，比如逆时针碰到的第一个RS点，就是被分配到的RS。因此从这个角度来看，经典一致性哈希的均衡性在于RS的哈希点分布的均衡性，如果RS哈希点分布均衡，那么一致性哈希一定是即均衡且当后端RS数量变化时，受影响的session更少。<strong>通常的做法是将一个RS哈希多次到环上</strong>。这样能保证RS能更均衡的散布在环上。</p>
+<h3 id="google-maglev一致性哈希">Google Maglev一致性哈希</h3>
+<p>其做法是将均匀性至于minimal disrupt之上，根据前几篇blog可以看出，Google Maglev的算法是最均衡的，因为他能完全均分hash array（也就是哈希空间），但是通过permutation表，尽量降低哈希的碰撞率，在碰撞率小的时候，能够保证位置不会被多个表项所抢占。</p>
+</article>
+
+        </main><footer id="footer">
+    Copyright © 2020 Floating Minds Peng He
+</footer>
+</body>
+</html>

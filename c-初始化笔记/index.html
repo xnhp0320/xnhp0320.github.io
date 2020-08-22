@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Peng He&#39;s blog">
+    
+    <link rel="shortcut icon" href="https://xnhp0320.github.io/favicon.ico">
+    
+    <link rel="stylesheet" href="/css/style.min.css">
+
+    <title>C&#43;&#43;初始化笔记</title>
+</head>
+<body><header id="banner">
+    <h2><a href="https://xnhp0320.github.io">漂浮的思绪</a></h2>
+    <nav>
+        <ul>
+            
+            <li>
+                <a href="/" title="posts">posts</a>
+            </li>
+            
+            <li>
+                <a href="/about/" title="about">about</a>
+            </li>
+            
+        </ul>
+    </nav>
+</header>
+<main id="content">
+<article>
+    <header id="post-header">
+        <h1>C&#43;&#43;初始化笔记</h1><time>July 14, 2017</time></header><p>符合以下规则：</p>
+<ol>
+<li>默认构造函数（使用类内初始值和默认值，如果没有类内初始值，而且不是静态类型，一般是残值）</li>
+<li>有定义构造函数，则不合成默认构造函数，除非使用=default</li>
+<li>构造函数初始值列表进行初始化</li>
+<li>构造函数内部，进入构造函数内部，所有成员已经完成初始化，对成员进行后续操作可以看成是一个函数在进行初始化。</li>
+</ol>
+<p>下面的代码，初始化逻辑：</p>
+<ol>
+<li>进入到构造函数内部之后，所有的成员变量都已经完成了初始化。此时，成员b采用默认构造函数进行初始化。打印第一个 default</li>
+<li>使用默认构造函数创建一个临时对象B()，打印第二个 default。</li>
+<li>B() 是一个右值，所以调用右值赋值函数，但是由于B的移动构造函数是删除的，所以只能使用拷贝赋值函数  B&amp; operator=(const B&amp;) 来作为备选，本来一个const B&amp; 也可以指向一个临时的右值 B()。</li>
+<li>使用赋值拷贝函数，将临时对象B()拷贝给成员b。打印 B assign</li>
+</ol>
+<div class="highlight"><pre class="chroma"><code class="language-cpp" data-lang="cpp">  
+<span class="cp">#</span><span class="cp">include</span> <span class="cpf">&lt;iostream&gt;</span><span class="cp">
+</span><span class="cp"></span>
+<span class="k">struct</span> <span class="nc">B</span> <span class="p">{</span>
+
+    <span class="c1">//default ctor
+</span><span class="c1"></span>    <span class="n">B</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="sa"></span><span class="s">&#34;</span><span class="s">B default </span><span class="s">&#34;</span> <span class="o">&lt;</span><span class="o">&lt;</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="c1">//copy ctor
+</span><span class="c1"></span>    <span class="n">B</span><span class="p">(</span><span class="k">const</span> <span class="n">B</span><span class="o">&amp;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="sa"></span><span class="s">&#34;</span><span class="s">B copy </span><span class="s">&#34;</span> <span class="o">&lt;</span><span class="o">&lt;</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">B</span><span class="o">&amp;</span> <span class="k">operator</span><span class="o">=</span><span class="p">(</span><span class="k">const</span> <span class="n">B</span><span class="o">&amp;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span> <span class="o">&lt;</span><span class="o">&lt;</span><span class="sa"></span><span class="s">&#34;</span><span class="s">B assign </span><span class="s">&#34;</span><span class="o">&lt;</span><span class="o">&lt;</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
+        <span class="k">return</span> <span class="o">*</span><span class="k">this</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">B</span><span class="p">(</span><span class="n">B</span> <span class="o">&amp;</span><span class="o">&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="k">delete</span><span class="p">;</span>
+    <span class="n">B</span><span class="o">&amp;</span> <span class="k">operator</span><span class="o">=</span><span class="p">(</span><span class="n">B</span> <span class="o">&amp;</span><span class="o">&amp;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span> <span class="o">&lt;</span><span class="o">&lt;</span><span class="sa"></span><span class="s">&#34;</span><span class="s">B move </span><span class="s">&#34;</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
+        <span class="k">return</span> <span class="o">*</span><span class="k">this</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span><span class="p">;</span>
+
+<span class="k">struct</span> <span class="nc">A</span> <span class="p">{</span>
+    <span class="n">B</span> <span class="n">b</span><span class="p">;</span>
+    <span class="n">A</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">b</span> <span class="o">=</span> <span class="n">B</span><span class="p">(</span><span class="p">)</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span><span class="p">;</span>
+
+
+<span class="kt">int</span>  <span class="nf">main</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">A</span> <span class="n">a</span><span class="p">;</span>
+<span class="p">}</span>
+
+</code></pre></div><p>##三五法则</p>
+<p>为了不用去考虑复杂的C++默认合成函数的细则，如果已经定义了任何一个构造函数，其余的构造函数最好都定义一遍。默认构造函数，拷贝构造，拷贝赋值，移动构造，移动赋值。其中移动赋值需要考虑赋值对象是自身的情况。</p>
+</article>
+
+        </main><footer id="footer">
+    Copyright © 2020 Floating Minds Peng He
+</footer>
+</body>
+</html>

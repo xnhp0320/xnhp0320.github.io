@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Peng He&#39;s blog">
+    
+    <link rel="shortcut icon" href="https://xnhp0320.github.io/favicon.ico">
+    
+    <link rel="stylesheet" href="/css/style.min.css">
+
+    <title>Go 语言的初始化</title>
+</head>
+<body><header id="banner">
+    <h2><a href="https://xnhp0320.github.io">漂浮的思绪</a></h2>
+    <nav>
+        <ul>
+            
+            <li>
+                <a href="/" title="posts">posts</a>
+            </li>
+            
+            <li>
+                <a href="/about/" title="about">about</a>
+            </li>
+            
+        </ul>
+    </nav>
+</header>
+<main id="content">
+<article>
+    <header id="post-header">
+        <h1>Go 语言的初始化</h1><time>July 26, 2017</time></header><p>Go语言的初始化有很多种形式，对照着C++其实可以体察出一些有意思的地方。我有一些猜想，也不知道对不对，记录下来。</p>
+<p>##var与make
+Go语言Specification中规定:</p>
+<blockquote>
+<p>When storage is allocated for a variable, either through a declaration or a call of new, or when a new value is created, either through a composite literal or a call of make, and no explicit initialization is provided, the variable or value is given a default value. Each element of such a variable or value is set to the zero value for its type:</p>
+<p><strong>false</strong> for booleans, <strong>0</strong> for integers, <strong>0.0</strong> for floats, <strong>&quot;&quot;</strong> for strings, and <strong>nil</strong> for pointers, functions, interfaces, slices, channels, and maps.</p>
+</blockquote>
+<p>用var定义的变量可以认为是一个declartion，那么下面定义的通道显然是一个<strong>nil</strong>通道：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">var</span> <span class="nx">ch1</span> <span class="kd">chan</span> <span class="kt">int</span>
+</code></pre></div><p>根据<a href="https://dave.cheney.net/2013/04/30/curious-channels">这里</a>，这个nil通道始终阻塞，而且当你编译的时候，go会报警，说你对一个nil通道进行读写。</p>
+<p>正确的用法必须是</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">var</span> <span class="nx">ch2</span> <span class="p">=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kt">int</span><span class="p">)</span>
+</code></pre></div><p>这样创建出来的通道才是可以用的。但是翻阅Go Specification中关于make的解释：</p>
+<blockquote>
+<p>The built-in function make takes a type T, which must be a slice, map or channel type, optionally followed by a type-specific list of expressions. It returns a value of type T (not *T). The memory is initialized as described in the section on <strong>initial</strong> values.</p>
+</blockquote>
+<p>似乎并不能解释为啥只有make出来的通道才是正确的。如果打印出来的话，还可以清楚的看明白，这两种初始化出来的通道的不同之处：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="nx">fmt</span><span class="p">.</span><span class="nf">Printf</span><span class="p">(</span><span class="s">&#34;%v %v\n&#34;</span><span class="p">,</span> <span class="nx">ch1</span><span class="p">,</span> <span class="nx">ch2</span><span class="p">)</span>
+</code></pre></div><pre><code>&lt;nil&gt; 0xc42007a000
+</code></pre><p>一个是有值的，而另一个是nil</p>
+<p>想起来，C++里面的默认构造函数是什么参数都没有的，类似于用go定义一个变量，而有时候需要对某些对象的初始化带入一个参数，于是就有了make，比如构造slice或者channel的时候，需要指定len/cap或者buffer的大小：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">var</span> <span class="nx">ch</span> <span class="p">=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kt">int</span><span class="p">,</span> <span class="mi">1000</span><span class="p">)</span>
+</code></pre></div><p>这是不是类似于带参数的构造函数？于是他们就又发明了一个新的函数make。而make只能对特殊种类的对象类型，比如slice，chan，map使用，struct上怎么用？貌似是不能的。</p>
+<p>如果不发明新的函数，直接var定义的时候就开始分配内存的话，下面代码就会出现白构造一次channel的情况：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">var</span> <span class="nx">ch</span> <span class="kd">chan</span> <span class="kt">int</span>      <span class="c1">//这里构造一个channel
+</span><span class="c1"></span><span class="nx">ch</span> <span class="p">=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kt">int</span><span class="p">,</span> <span class="mi">1000</span><span class="p">)</span> <span class="c1">//很快上面构造的channel已经没用了。
+</span></code></pre></div><p>为啥会这样？我感觉是因为Go的值语义导致的。</p>
+<p>##值语义和对象/引用语义
+对这两种语义的察觉，是我学习C++的一大收获。实际上我感觉，Go的本质就是值语义的。因为Go本身没有引用这种说法，也没有别名和绑定的说法。在C++中可以定义一个绑定于一个int类型的引用，而编译器可以不为这个引用产生任何新的存储空间：</p>
+<div class="highlight"><pre class="chroma"><code class="language-cpp" data-lang="cpp"><span class="kt">int</span> <span class="o">&amp;</span><span class="n">j</span> <span class="o">=</span> <span class="n">i</span><span class="p">;</span>
+<span class="n">j</span><span class="o">+</span><span class="o">+</span><span class="p">;</span> <span class="c1">//j就是i, 并不需要一个新的指针指向i。
+</span></code></pre></div><p>而Go语言中，所谓slice、map、chan是引用可以直接赋值不用担心出现值的拷贝，本质上是这些类型中包含了指针，那么这些类型的拷贝就类似于C++中的浅拷贝，而不是值的复制。你可以认为一个slice就是一个结构体包含一个指向数组的指针，两个整数类型，用于存储cap和len，因此，复制一个slice的代价是很低的，但是并不代表slice就没有size。</p>
+<p>在这个理解的前提下，如果出现以下的语句：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">var</span> <span class="nx">ch</span> <span class="p">=</span> <span class="kd">struct</span> <span class="p">{</span><span class="nx">i</span> <span class="kt">int</span><span class="p">;</span> <span class="nx">j</span> <span class="kt">int</span><span class="p">}</span> <span class="p">{</span><span class="nx">i</span><span class="p">:</span><span class="mi">1</span><span class="p">,</span> <span class="nx">j</span><span class="p">:</span><span class="mi">2</span><span class="p">}</span>
+</code></pre></div><p>那么到底是定义了一个struct{i int; j int}这种类型的变量ch，然后构造了一个临时的右值(struct {i int; j int} {i:1 , j:2}，然后进行了值的赋值，即调用了拷贝构造函数赋值将这个临时对象拷贝给了ch？Go也需要做copy elision优化么？</p>
+<p>反过来说，绝大多数带gc的语言都是引用语义(python, java)，Go这种值语义的语言其实有个很明显的优势，栈上定义的对象，离开栈之后可以确定性的析构了，显然不需要再用到他了，无需引用计数，也无需gc。我的猜想是否正确呢？抽象来说，只要是值的名字离开了他的作用域，这个值就可以确定的析构了。这样做对吗？</p>
+<p>##总结
+总的来说，Go就是一个better C，根本不可能动摇的了C++的份额。现实也的确验证了这个结论。Go语言有它先进的地方，利用协程来控制并发。但是这种先进似乎并不是一种语言特性而更像是一种运行时特性。
+运行时的特性又和操作系统密切相关，一旦深究起来，还是有很多细微的地方非常含糊。如果你要更高的性能，那么你就得知道所谓的协程到底底层是怎么实现的，通道的实现用了锁吗？这都是通过语法语义回答不了的。</p>
+<p>给我的感觉，Go是一个好用的工具，就算语言设计得再垃圾，库好，生态好也能火很久。君不见PHP，javascript。。。。</p>
+</article>
+
+        </main><footer id="footer">
+    Copyright © 2020 Floating Minds Peng He
+</footer>
+</body>
+</html>

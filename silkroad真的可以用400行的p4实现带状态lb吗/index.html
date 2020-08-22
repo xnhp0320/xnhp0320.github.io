@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Peng He&#39;s blog">
+    
+    <link rel="shortcut icon" href="https://xnhp0320.github.io/favicon.ico">
+    
+    <link rel="stylesheet" href="/css/style.min.css">
+
+    <title>SilkRoad，真的可以用400行的p4实现带状态LB吗？</title>
+</head>
+<body><header id="banner">
+    <h2><a href="https://xnhp0320.github.io">漂浮的思绪</a></h2>
+    <nav>
+        <ul>
+            
+            <li>
+                <a href="/" title="posts">posts</a>
+            </li>
+            
+            <li>
+                <a href="/about/" title="about">about</a>
+            </li>
+            
+        </ul>
+    </nav>
+</header>
+<main id="content">
+<article>
+    <header id="post-header">
+        <h1>SilkRoad，真的可以用400行的p4实现带状态LB吗？</h1><time>September 2, 2017</time></header><p>SIGCOMM论文第二弹，说说SilkRoad。</p>
+<p>进入主题之前，先八卦一下论文作者单位之多样，来自南加州，facebook，barefoot，和耶鲁。而且看到了熟悉Minlan Yu居然单位是耶鲁大学，跳槽？</p>
+<p>##歌词大意</p>
+<p>这个论文主要是说如何在交换芯片，或者说ASIC中做LB。LB相对于普通的包转发来说，主要的难点在于需要记录session，也就是stateful packet processing。相对于内存来说，ASIC内部SRAM size是非常有限的，因此如何在较小的空间内存储LB需要的大量流记录是个挑战。</p>
+<p>##LB模式</p>
+<p>国内公司，主要是互联网公司有很多种LB的模式，而国外的似乎都是最基本的DNAT+SNAT模式。下面假设cip为client ip，DIP为RealServer IP，所谓的DNAT+SNAT模式为：</p>
+<p>IN方向（客户访问服务器方向，经过LB做DNAT）：(CIP, VIP) -&gt; (CIP, DIP）
+OUT方向（服务器回包，不经过LB，通过CTK）：（DIP, CIP）-&gt; (VIP, CIP)</p>
+<p>每一个VIP对应一个DIP pool，每个DIP对应一个Real server。</p>
+<p>##主要挑战</p>
+<p>LB需要存储流记录的一个原因是需要保持PCC（per connection consistency)，也就是一条流中的第一个包如果选择去了一台RealServer(RS)，那么该流剩下的包都应该去同一台RealServer。这基本上是LB设计的常识。实际上，如果后端RS数量是固定的，那么也完全不需要流表存储，我们可以使用如下的方式来无状态转发：</p>
+<p>Flow -&gt; Hash(Flow) -&gt; 根据Hash值在DIP pool中选择一个DIP，如DIP[hash % #DIP pool]</p>
+<p>而麻烦的是，DIP pool经常需要更新。文章花费了大概一页左右的篇幅说明为啥DIP pool需要更新，更新有多频繁。而这个基本也属于常识：比如健康检查这个DIP对应的RS挂了，比如扩容，比如服务升级（对服务器需要重启）等等。</p>
+<p>因此文章在ASIC中做LB的主要两个挑战：1）如何存储流记录到有限的片内SRAM上，2）如何在DIP pool更新的时候依旧保持PCC。</p>
+<p>##隐含的挑战</p>
+<p>语言上，这个论文写的并不是很清晰，感觉像是临近投稿时赶出来的，也有可能涉及商业机密，对具体细节语焉不详。我反复看了几次，才明白要理解这其中的挑战中具体细节，尤其是第二点挑战。这里说说我的理解：</p>
+<p>1）对于DIP的选择，流匹配，流失配，都在数据面完成，不涉及控制面。</p>
+<p><img src="https://res.cloudinary.com/xnhp0320/image/upload/v1547278274/blog/QQ20170902-142906.png" alt=""></p>
+<p>如上图所示，如果一个数据包没有匹配中流表，ASIC的逻辑是从DIP pool中自觉选取一个DIP，而不是将数据包上送给控制面（交换机的软件），这个数据包可能就此直接转发了，不会被buffer住！</p>
+<p>2）而流表插入新流的操作需要在软件层面展开</p>
+<p>这是因为交换机一般采用cuckoo hashing的技术，流表的插入需要复杂的计算和多次表项的搬移。关于cuckoo hasing的具体细节，这里就不展开了。</p>
+<p>实际上，整个新流的到达过程在ASIC中处理是这样的：</p>
+<p>首先，流表失配，数据包直接从VIP Table中获取DIP发送。</p>
+<p>然后，数据包会被记录下来，论文宣称利用了交换芯片的mac leanring用到的leanring filter，将数据包的五元组记录下来，去重，batch上送给software，software这才开始处理流记录的插入。也就是说，当软件开始进行流插入时，底层的数据包已经被转发了。</p>
+<p>这样实际上带来的一个问题：在软件需要更新DIP pool的同时，数据包依旧按照老的DIP pool在选取DIP，如果此时直接更新DIP pool，会导致前后不一致，同一个流中的数据包被送到不同的DIP。不能保持PCC。因此我们需要在将更新DIP pool的时间内新到的流记录下来（文中将这些新到的流称之为pending connection），在插入流表的时候，如果是更新期间新到的流，就直接按照老的DIP插入流记录，而是更新完成后的流，就按照新的DIP的方式插入流表。</p>
+<p>总而言之，新流的插入是在新包转发之后进行的，这是软件LB和ASIC LB上的最大区别。</p>
+<p>而这一点，我认为论文没有说清楚！</p>
+<p>##解决方案</p>
+<p>首先是流记录的压缩，文章的解决方案就是将只记录流哈希的摘要，而不是流记录本身。文章提出的方案是只记录16bit，而不是五元组（IPv4是13B，IPv6是37B）。文章号称能够记录10M条流，而本身hash摘要只有16bit，从信息论上来说，16bit最多只能区分64K条流，这里又隐含了一些信息，不好理解。我的理解是：</p>
+<ul>
+<li>流摘要和流哈希值不是一回事，流记录的地址是流哈希值算出，而流记录本身的摘要可能是另一个哈希值算出，因此如果流冲突，必须是流哈希冲突+流摘要冲突，如果地址信息足够长，是可以编码10M的流记录的。</li>
+</ul>
+<p>遗憾的是，我个人感觉，这篇论文对如何存储这个记录的具体做法，实际上是语焉不详。可能需要具体看了他的p4代码之后才知道具体怎么做的。</p>
+<p>然后是DIP pool更新的时候，对新建流保持PCC，这个主要的做法我已经在挑战的时候说了，他是利用一个Bloom Filter将更新时间段内的新流记录下来，用来区分到底使用老DIP还是新DIP。在更新期间的数据包，如果miss了流表，而命中了BF，插入的流记录使用老的DIP，如果没有命中BF，使用新DIP。如下图所示：</p>
+<p><img src="https://res.cloudinary.com/xnhp0320/image/upload/v1547278275/blog/QQ20170902-150827.png" alt=""></p>
+<p>##综合评价</p>
+<p>个人感觉，这个论文给LB做法的提供了一些新的思路。但具体是否靠谱，我感觉还有几个问题需要思考：</p>
+<p>1）流如何超时？</p>
+<p>2）如何进行会话保持？</p>
+<p>暂时就写这么多，为了理解这篇论文消耗了很多脑细胞，一时半会是不大可能提出非常中肯的意见了。</p>
+</article>
+
+        </main><footer id="footer">
+    Copyright © 2020 Floating Minds Peng He
+</footer>
+</body>
+</html>

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Peng He&#39;s blog">
+    
+    <link rel="shortcut icon" href="https://xnhp0320.github.io/favicon.ico">
+    
+    <link rel="stylesheet" href="/css/style.min.css">
+
+    <title>C&#43;&#43;值的分类</title>
+</head>
+<body><header id="banner">
+    <h2><a href="https://xnhp0320.github.io">漂浮的思绪</a></h2>
+    <nav>
+        <ul>
+            
+            <li>
+                <a href="/" title="posts">posts</a>
+            </li>
+            
+            <li>
+                <a href="/about/" title="about">about</a>
+            </li>
+            
+        </ul>
+    </nav>
+</header>
+<main id="content">
+<article>
+    <header id="post-header">
+        <h1>C&#43;&#43;值的分类</h1><time>July 16, 2017</time></header><p>本文根据<a href="http://www.stroustrup.com/terminology.pdf">这篇文章</a>整理而成。</p>
+<p>C++的值有两个正交的特性：1）有名字，其实就是可以取地址；2）可以从别的地方移动过来（can be moved from）；有名字用i表示，没有用大写的I，可以移动用m表示，不能移动用M。那么C++的值有以下几个分类：</p>
+<p>1）iM: 有名字，但是不能从别处移动过来。</p>
+<p>2）im: 有名字，可以从别处移动过来。</p>
+<p>3）Im: 没有名字，但是可以从别处移动过来。</p>
+<p>这些值的关系如下图所示：</p>
+<p><img src="https://res.cloudinary.com/xnhp0320/image/upload/v1547278278/blog/WX20170716-214038_2x.png" alt=""></p>
+<p>首先，在C++中，任何值不是左值就是右值。</p>
+<p>其次，左值不是右值，右值不是左值。</p>
+<p>在图中可以看到，这些值的特点构成一个W形状，左边这条腿是左值，右边这两条腿是右值。</p>
+<p>那么C++中的左值在上图中到底对应什么？目前来看应该是iM，即有名字，但是不能从别处移动得来，这个也比较自然。因为在C++11之前，啥都是不能移动的。那么i是什么？i表示generalized lvalue，即比较通用的左值。这个也符合C++的定义，在C++中只要有名字的就是左值，称之为glvalue。</p>
+<p>那么什么是右值？在C++11之前，右值语义最想解决的问题是资源的移动。那么右值应该就是可以被移动的，而且一般这种右值是没有名字的，比如临时产生的变量，这种，我们称之为prvalue，即纯右值。而m表示一般右值。</p>
+<p>那么最后的一个问题来了，W中间这个im表示是啥？即有名字，又可以移动。那么只能是一个右值引用了。因此称之为xrvalue。C++11称之为将亡值。</p>
+<p>来看几个例子：</p>
+<div class="highlight"><pre class="chroma"><code class="language-cpp" data-lang="cpp">
+<span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">string</span> <span class="n">get_str</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="sa"></span><span class="s">&#34;</span><span class="s">hahaha</span><span class="s">&#34;</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">string</span><span class="o">&amp;</span><span class="o">&amp;</span> <span class="n">get_str</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+   <span class="k">return</span> <span class="sa"></span><span class="s">&#34;</span><span class="s">hahaha</span><span class="s">&#34;</span><span class="p">;</span>
+<span class="p">}</span>
+
+</code></pre></div><p>在C++中，第一个get_str返回的是prvalue，是一个纯右值，可以移动但是没有名字。但是第二get_str返回是xrvalue，是右值，但是有名字。区别在于：</p>
+<div class="highlight"><pre class="chroma"><code class="language-cpp" data-lang="cpp">
+<span class="k">const</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">string</span> <span class="o">&amp;</span> <span class="n">str</span> <span class="o">=</span> <span class="n">get_str</span><span class="p">(</span><span class="p">)</span><span class="p">;</span> <span class="c1">//第一个返回的对象的生命期可以延续
+</span><span class="c1"></span>
+<span class="k">const</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">string</span> <span class="o">&amp;</span> <span class="n">str</span> <span class="o">=</span> <span class="n">get_str</span><span class="p">(</span><span class="p">)</span><span class="p">;</span> <span class="c1">//第二个返回的对象实际已经销毁了，这里str引用指向的对象已经没有了。
+</span></code></pre></div><p>这是因为C++标准规定了，temporaries die at the end of the statement, unless they are bound to const reference, in which case they die when the reference goes out of scope.</p>
+<p>&hellip;.</p>
+</article>
+
+        </main><footer id="footer">
+    Copyright © 2020 Floating Minds Peng He
+</footer>
+</body>
+</html>

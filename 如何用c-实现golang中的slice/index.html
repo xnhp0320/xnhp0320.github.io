@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Peng He&#39;s blog">
+    
+    <link rel="shortcut icon" href="https://xnhp0320.github.io/favicon.ico">
+    
+    <link rel="stylesheet" href="/css/style.min.css">
+
+    <title>如何用C&#43;&#43;实现Golang中的slice？</title>
+</head>
+<body><header id="banner">
+    <h2><a href="https://xnhp0320.github.io">漂浮的思绪</a></h2>
+    <nav>
+        <ul>
+            
+            <li>
+                <a href="/" title="posts">posts</a>
+            </li>
+            
+            <li>
+                <a href="/about/" title="about">about</a>
+            </li>
+            
+        </ul>
+    </nav>
+</header>
+<main id="content">
+<article>
+    <header id="post-header">
+        <h1>如何用C&#43;&#43;实现Golang中的slice？</h1><time>December 9, 2017</time></header><div class="highlight"><pre class="chroma"><code class="language-cpp" data-lang="cpp">
+<span class="cp">#</span><span class="cp">include</span> <span class="cpf">&lt;memory&gt;</span><span class="cp">
+</span><span class="cp"></span><span class="cp">#</span><span class="cp">include</span> <span class="cpf">&lt;vector&gt;</span><span class="cp">
+</span><span class="cp"></span><span class="cp">#</span><span class="cp">include</span> <span class="cpf">&lt;cstddef&gt;</span><span class="cp">
+</span><span class="cp"></span><span class="cp">#</span><span class="cp">include</span> <span class="cpf">&lt;iostream&gt;</span><span class="cp">
+</span><span class="cp"></span>
+
+<span class="k">namespace</span> <span class="n">fun</span> <span class="p">{</span>
+
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">typename</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="k">class</span> <span class="nc">slice</span> <span class="p">{</span>
+
+    <span class="k">template</span> <span class="o">&lt;</span><span class="k">typename</span><span class="o">&gt;</span>
+    <span class="k">friend</span> <span class="n">slice</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span> <span class="n">make_slice</span><span class="p">(</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">size_t</span> <span class="p">)</span><span class="p">;</span>
+
+    <span class="k">using</span> <span class="n">iter_type</span> <span class="o">=</span> <span class="k">typename</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="o">:</span><span class="o">:</span><span class="n">iterator</span><span class="p">;</span>
+
+    <span class="k">public</span><span class="o">:</span>
+        <span class="n">slice</span><span class="p">(</span><span class="k">const</span> <span class="n">slice</span> <span class="o">&amp;</span><span class="n">s</span><span class="p">)</span><span class="o">:</span> <span class="n">ptr</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">ptr</span><span class="p">)</span><span class="p">,</span> <span class="n">begin</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">begin</span><span class="p">)</span><span class="p">,</span> <span class="n">end</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">end</span><span class="p">)</span> <span class="p">{</span><span class="p">}</span>
+
+        <span class="n">slice</span><span class="p">(</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">size_t</span> <span class="n">cap</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">ptr</span> <span class="o">=</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">make_shared</span><span class="o">&lt;</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="o">&gt;</span><span class="p">(</span><span class="n">cap</span><span class="p">)</span><span class="p">;</span>
+            <span class="n">ptr</span><span class="o">-</span><span class="o">&gt;</span><span class="n">reserve</span><span class="p">(</span><span class="n">cap</span><span class="p">)</span><span class="p">;</span>
+            <span class="n">begin</span> <span class="o">=</span> <span class="n">ptr</span><span class="o">-</span><span class="o">&gt;</span><span class="n">begin</span><span class="p">(</span><span class="p">)</span><span class="p">;</span>
+            <span class="n">end</span> <span class="o">=</span> <span class="n">ptr</span><span class="o">-</span><span class="o">&gt;</span><span class="n">end</span><span class="p">(</span><span class="p">)</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="n">slice</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span> <span class="n">as_slice</span><span class="p">(</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">size_t</span> <span class="n">begin</span><span class="p">,</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">size_t</span> <span class="n">end</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">return</span> <span class="nf">slice</span><span class="p">(</span><span class="o">*</span><span class="k">this</span><span class="p">,</span> <span class="k">this</span><span class="o">-</span><span class="o">&gt;</span><span class="n">begin</span> <span class="o">+</span> <span class="n">begin</span><span class="p">,</span> <span class="k">this</span><span class="o">-</span><span class="o">&gt;</span><span class="n">begin</span> <span class="o">+</span> <span class="n">end</span><span class="p">)</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="n">T</span><span class="o">&amp;</span> <span class="k">operator</span><span class="p">[</span><span class="p">]</span><span class="p">(</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">size_t</span> <span class="n">idx</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">return</span> <span class="o">*</span><span class="p">(</span><span class="n">begin</span> <span class="o">+</span> <span class="n">idx</span><span class="p">)</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="n">slice</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span> <span class="o">&amp;</span> <span class="k">operator</span><span class="o">=</span><span class="p">(</span><span class="n">slice</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span> <span class="o">&amp;</span><span class="n">b</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span><span class="p">(</span><span class="k">this</span> <span class="o">!</span><span class="o">=</span> <span class="o">&amp;</span><span class="n">b</span><span class="p">)</span> <span class="p">{</span>
+                <span class="n">ptr</span> <span class="o">=</span> <span class="n">b</span><span class="p">.</span><span class="n">ptr</span><span class="p">;</span>
+                <span class="n">begin</span> <span class="o">=</span> <span class="n">b</span><span class="p">.</span><span class="n">begin</span><span class="p">;</span>
+                <span class="n">end</span> <span class="o">=</span> <span class="n">b</span><span class="p">.</span><span class="n">end</span><span class="p">;</span>
+            <span class="p">}</span>
+            <span class="k">return</span> <span class="o">*</span><span class="k">this</span><span class="p">;</span>
+        <span class="p">}</span>
+
+
+
+    <span class="k">private</span><span class="o">:</span>
+        <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">shared_ptr</span><span class="o">&lt;</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="o">&gt;</span> <span class="n">ptr</span><span class="p">;</span>
+        <span class="n">iter_type</span> <span class="n">begin</span><span class="p">;</span>
+        <span class="n">iter_type</span> <span class="n">end</span><span class="p">;</span>
+
+        <span class="n">slice</span><span class="p">(</span><span class="k">const</span> <span class="n">slice</span> <span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">iter_type</span> <span class="n">b</span><span class="p">,</span>  <span class="n">iter_type</span> <span class="n">e</span><span class="p">)</span> <span class="o">:</span> <span class="n">ptr</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">ptr</span><span class="p">)</span><span class="p">,</span> <span class="n">begin</span><span class="p">(</span><span class="n">b</span><span class="p">)</span><span class="p">,</span> <span class="n">end</span><span class="p">(</span><span class="n">e</span><span class="p">)</span> <span class="p">{</span><span class="p">}</span>
+<span class="p">}</span><span class="p">;</span>
+
+<span class="k">template</span><span class="o">&lt;</span><span class="k">typename</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="n">slice</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span> <span class="n">make_slice</span><span class="p">(</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">size_t</span> <span class="n">cap</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">slice</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">cap</span><span class="p">)</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="p">}</span>
+
+
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">fun</span><span class="p">;</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="n">s</span> <span class="o">=</span> <span class="n">make_slice</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span><span class="p">;</span> <span class="c1">// s := make(int, 10)
+</span><span class="c1"></span>    <span class="n">s</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span>
+
+    <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span><span class="o">&lt;</span><span class="o">&lt;</span><span class="n">s</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span><span class="o">&lt;</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
+    <span class="k">auto</span> <span class="n">s0</span> <span class="o">=</span> <span class="n">s</span><span class="p">.</span><span class="n">as_slice</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="mi">10</span><span class="p">)</span><span class="p">;</span> <span class="c1">//s0 := s[2:10]
+</span><span class="c1"></span>    <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span> <span class="o">&lt;</span><span class="o">&lt;</span><span class="n">s0</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span><span class="o">&lt;</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+</code></pre></div><p>很粗糙的实现，没有异常，没有cap/len，但是意思到了。
+实际上c++根本不需要slice，vector+shared_ptr足以。</p>
+</article>
+
+        </main><footer id="footer">
+    Copyright © 2020 Floating Minds Peng He
+</footer>
+</body>
+</html>

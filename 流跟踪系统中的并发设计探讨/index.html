@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Peng He&#39;s blog">
+    
+    <link rel="shortcut icon" href="https://xnhp0320.github.io/favicon.ico">
+    
+    <link rel="stylesheet" href="/css/style.min.css">
+
+    <title>流跟踪系统中的并发设计探讨</title>
+</head>
+<body><header id="banner">
+    <h2><a href="https://xnhp0320.github.io">漂浮的思绪</a></h2>
+    <nav>
+        <ul>
+            
+            <li>
+                <a href="/" title="posts">posts</a>
+            </li>
+            
+            <li>
+                <a href="/about/" title="about">about</a>
+            </li>
+            
+        </ul>
+    </nav>
+</header>
+<main id="content">
+<article>
+    <header id="post-header">
+        <h1>流跟踪系统中的并发设计探讨</h1><time>February 4, 2019</time></header><p>流表，或者严谨一点的说，流跟踪（flow tracking）模块在网络中间盒子（各类网关）中广泛存在。从最简单的LB toa模块（其实借用了linux内核的socket系统来维护流状态），LB中的session表(用于维护和释放localip，记录各种流的原始信息），安全组(security group)的实现，到用来做网关设备的快速路径的主要组成部分，都需要一个流跟踪系统实现功能。可以说，在实际网络产品研发中，流跟踪系统具有较为广泛的应用，同时写起来也有很大的相似度，是有可能被标准化，或者被套路化的产物。但是在具体实践中，却很少有文章探讨这类系统的实现，或者说一些常见pattern（套路）。</p>
+<h3 id="流跟踪系统的组成">流跟踪系统的组成</h3>
+<p>流跟踪，顾名思义就是维护网络中的每条流的状态。简单来说就是一个哈希表（流的检索）加上一个流表项内存池，一个定时器（流的超时）机制，中间再加上流的状态跳转表，就是流跟踪系统的全部了。每个数据包查找会导致对应流状态的变化，流状态变化会更新定时器的超时时间，流跟踪系统维护的流的出生（流创建）到流的死亡（流超时）。</p>
+<p>这个东西看起来设计很简单，但是挑战在于：</p>
+<ul>
+<li>流跟踪（流表）系统每个包都要经过，是性能critical的部分。</li>
+<li>流表需要多个核同时读写，需要做好并发设计。</li>
+<li>定时器一般是一个异步的系统，如果定时器+流表查找并发互相存在，流表的并发设计就开始有点复杂，流表项的安全回收成为一个问题。</li>
+</ul>
+<p>因此流跟踪中的并发设计往往会成为一个挑战，本文针对这个问题做一点探讨。本文主要考虑的是多核共享流表的并发设计，per-thread的流表没有并发问题，不在本文考虑之列。</p>
+<p>实际上，这个并发设计的核心问题在于：<strong>何时能够安全的释放流表表项？如何在保证安全的前提下，性能开销最小？</strong></p>
+<h3 id="ipvs的流跟踪系统设计">ipvs的流跟踪系统设计</h3>
+<p>首先看看内核中经典的ipvs是怎么来设计这个流跟踪系统的。这个基本上也是各个流跟踪系统的设计的主要的照抄对象。这里分析的是内核3.10+（早期2.6.32时代，使用读写锁，后期变化不大）的ipvs（代码部分用的是4.20的）。</p>
+<p>ipvs系统中，流表的并发设计，主要利用了RCU+引用计数，简单摘出内核的流表查找部分的代码：</p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="k">static</span> <span class="kr">inline</span> <span class="k">struct</span> <span class="n">ip_vs_conn</span> <span class="o">*</span>
+<span class="nf">__ip_vs_conn_in_get</span><span class="p">(</span><span class="k">const</span> <span class="k">struct</span> <span class="n">ip_vs_conn_param</span> <span class="o">*</span><span class="n">p</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">hash</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">ip_vs_conn</span> <span class="o">*</span><span class="n">cp</span><span class="p">;</span>
+
+    <span class="n">hash</span> <span class="o">=</span> <span class="n">ip_vs_conn_hashkey_param</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="nb">false</span><span class="p">)</span><span class="p">;</span>
+
+    <span class="n">rcu_read_lock</span><span class="p">(</span><span class="p">)</span><span class="p">;</span>
+
+    <span class="n">hlist_for_each_entry_rcu</span><span class="p">(</span><span class="n">cp</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ip_vs_conn_tab</span><span class="p">[</span><span class="n">hash</span><span class="p">]</span><span class="p">,</span> <span class="n">c_list</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="p">.</span><span class="p">.</span><span class="p">.</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">__ip_vs_conn_get</span><span class="p">(</span><span class="n">cp</span><span class="p">)</span><span class="p">)</span>
+                <span class="k">continue</span><span class="p">;</span>
+            <span class="cm">/* HIT */</span>
+            <span class="n">rcu_read_unlock</span><span class="p">(</span><span class="p">)</span><span class="p">;</span>
+            <span class="k">return</span> <span class="n">cp</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    <span class="n">rcu_read_unlock</span><span class="p">(</span><span class="p">)</span><span class="p">;</span>
+    <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div><p>对于ipvs流表，内核使用了RCU来进行流表项的读写并发设计，但同时又使用了<code>__ip_vs_conn_get</code>函数对流表表项做引用计数，该函数的代码为：</p>
+<pre><code>static inline bool __ip_vs_conn_get(struct ip_vs_conn *cp)
+{
+    return refcount_inc_not_zero(&amp;cp-&gt;refcnt);
+}
+</code></pre><p>其中<code>refcount_inc_not_zero</code>是一个per cpu引用计数，暂时可以理解为 <code>atomic_inc_not_zero</code>。也就是说，如果引用计数不为0，那么就增加引用计数，如果为0，说明这个流表表项即将被回收，那么就让流表项不再能够被检索到。</p>
+<p>再来看看timer函数的骨架代码（省略了和流表无关的代码）：</p>
+<pre><code>static inline bool ip_vs_conn_unlink(struct ip_vs_conn *cp)
+{
+    unsigned int hash;
+    bool ret = false;
+    
+    hash = ip_vs_conn_hashkey_conn(cp);
+
+    ct_write_lock_bh(hash);
+    spin_lock(&amp;cp-&gt;lock);
+
+    if (cp-&gt;flags &amp; IP_VS_CONN_F_HASHED) {
+        /* Decrease refcnt and unlink conn only if we are last user */
+        if (refcount_dec_if_one(&amp;cp-&gt;refcnt)) {
+            hlist_del_rcu(&amp;cp-&gt;c_list);
+            cp-&gt;flags &amp;= ~IP_VS_CONN_F_HASHED;
+            ret = true;
+        }
+    }
+
+    spin_unlock(&amp;cp-&gt;lock);
+    ct_write_unlock_bh(hash);
+
+    return ret;
+}
+static void ip_vs_conn_expire(struct timer_list *t)
+{
+    struct ip_vs_conn *cp = from_timer(cp, t, timer);
+    struct netns_ipvs *ipvs = cp-&gt;ipvs;
+
+    /* Unlink conn if not referenced anymore */
+    if (likely(ip_vs_conn_unlink(cp))) {
+       
+        /* delete the timer if it is activated by other users */
+        del_timer(&amp;cp-&gt;timer);
+        call_rcu(&amp;cp-&gt;rcu_head, ip_vs_conn_rcu_free);
+        return;
+    }
+
+    refcount_inc(&amp;cp-&gt;refcnt);
+    cp-&gt;timeout = 60*HZ;
+
+    __ip_vs_conn_put_timer(cp);
+}
+</code></pre><p>可见，引用计数在此起到了主要作用，当引用计数为1时，说明目前流表只有一个引用，这个引用，就是哈希表本身，哈希表本身持有了对流表表项的引用，现在超时了，删除流表，于是引用为0，可以通过RCU系统安全释放掉这个流表表项资源。一旦引用计数不为1，那么就得必须重新激活timer，推迟流表资源的释放。</p>
+<h3 id="rcu和引用计数作用">RCU和引用计数作用</h3>
+<p>RCU在此处仅仅是保护哈希表的访问的并发性，但是并不保护流表表项的资源安全释放。从代码上看，每次读锁保护的区间，仅仅是哈希表查找的部分，一旦程序执行出了哈希表查找部分，则流表表项随时都有可能被timer系统给释放掉，此时，引用计数就派上了用场。</p>
+<p>可以说这是一个很完善的设计了。但是有几个问题可以思考：</p>
+<ul>
+<li>
+<p>如果是用户态polling（DPDK），我们该如何设计RCU机制？（DPDK是没有内置RCU的）</p>
+</li>
+<li>
+<p>现有的timer机制是否存在改进的空间？</p>
+</li>
+</ul>
+<h3 id="用户态polling的特点">用户态polling的特点</h3>
+<p>内核是一个比较特殊的地方，任何的设计都需要比较中庸，而不能让某一个任务占用过多的CPU。</p>
+<p>但是用户态是一个极致的地方，尤其DPDK的polling设计，CPU直接占用100%。同时，polling的设计导致同一个核上不大可能运行多个线程，另外用户态也没有中断的机制，其实要考虑的并发问题更少。</p>
+<h3 id="用户态的rcu思考">用户态的RCU思考</h3>
+<p>那么用户态的RCU机制如何设计？这里有一个<strong>简单</strong>的思路：</p>
+<p>既然每次polling循环都是收到一组包，然后处理掉。那么可以认为一个循环就对应RCU中的一次<strong>grace period</strong>，<code>rcu_synchronize()</code>就是等待一次polling的结束。</p>
+<p>那么是否我们可以去掉引用计数，而单纯的使用RCU机制来保证没有任何引用指向流表表项？答案是可以也不可以，如果每次polling循环结束后，没有任何对流表表项的引用被缓存，（比如，数据包中持有一个指向这个数据包所对应流表表项的指针，但是每次polling结束后，数据包都被发出或者free掉了），那么在这次polling循环中，如果流表表项已经被RCU删除掉了，本次循环结束后，即可保证再无任何引用（指针）指向这个流表表项，即可安全的删除。</p>
+<p>这种设计可以扩展到任何具有类似特点的系统中，即，<strong>资源的使用仅在一次循环中，循环结束后，因为资源的索引系统（哈希表）中已经不能查询到资源，而其他地方也没有缓存对资源的引用，我们即可确保没有地方对资源有引用，可以安全的释放这些资源</strong>。</p>
+<p>此时，timer超时后，大可以直接将流表表项移除，然后rcu_free，而不需要考虑流表引用计数。RCU系统会在未来的某个时候，确保所有的polling循环都已经完成了一遍，再安全的释放这个流表表项。</p>
+<p>意思是说，即使现在有某个线程持有这个流表表项，我们也可以从哈希表中删掉这个流表项，因为RCU系统会保证等待到所有线程都进入到下一个grace period，也就是下一次循环后，才安全的释放表项。在这个期间，只是这个流表表项不在哈希表里了，但这个流表表项并不会被内存回收掉。如果站在内核的视角看，相当于给整个polling循环做了一次读锁。</p>
+<p>但是如果系统中存在一些指针的缓存，则polling循环结束也不意味着引用消失，此时必须是用引用计数来确保资源的安全释放。</p>
+<p>简而言之，RCU只能保证程序的执行绪中不在持有某个资源的引用，但并不能保证程序中任何<strong>常驻的</strong>数据结构是否持有指向该资源的指针。一旦出现指针被保存，引用计数是保证资源安全释放的一种常见的手段。</p>
+<h3 id="timer的设计">timer的设计</h3>
+<p>内核中内置了一个timer，DPDK中也实现了一个timer。本人没有对DPDK中的timer实现做进一步研究，但是共享流表的timer有一个问题，就是timer必须也是共享的，也就是一条流上的数据包可以在不同的核调用<code>mod_timer</code>，这使得timer系统必须考虑并发而加锁。</p>
+<p>Timer系统基本是每个包都会访问的，属于性能critical部分。每次调用<code>mod_timer</code>都会导致至少一次spin_lock。SMP中，即使是无冲突下的spin_lock的开销也有10ns左右。这个开销并不小，何况，共享的timer，锁冲突的概率不低。</p>
+<p>既然加锁不可避免，那么能做的事情只能是避免锁冲突。我们提出了所谓的&quot;flow affinity lock design&rdquo;。基于一个观察，一条流的数据包，固然有可能在不同的核上出现，但是一般一条流的某一个方向的数据包只会在一个方向出现。这个很好理解，现代网卡的RSS特性和一些亲核特性的设计，很容易出现一个方向的流的数据包极有可能在一个核上。</p>
+<p>那么我们可以把一条流的timer拆成两个，一个管一个方向。这样每次数据包调用<code>mod_timer</code>时，只会调用他那个方向的timer，这样就能极大程度的避开锁冲突，每次加锁的性能开销降低。</p>
+<p>每次<code>run_timer</code>的时候，会检查两个方向的timer是否都已经超时，只有都超时才会调用timeout处理函数。但是因为有两个timer，会导致超时函数会被调用两次。timeout函数之间也存在并发：逻辑上一个timer的timeout函数会同时在两个核上调用。这个地方需要做好设计，让两个函数合作的把流表表项给free掉。</p>
+<p>这块的设计难度也不低，但是个人认为值得一试。</p>
+<h3 id="bypass-kernel的思考">Bypass kernel的思考</h3>
+<p>最近很流行bypass kernel，但是经过一年的DPDK开发，个人感觉是bypass kernel最后还是要重走内核的基础设施设计。比如RCU，比如timer。只是bypass kernel之后我们可以裁剪内核的设计思路，并且在某些方面做得比较极致。</p>
+<p>但是有多少有内核经验的人会从这个角度来开发DPDK呢？只能是DPDK的人自己去开发这些基础设施（RCU，timer，&hellip;），如果要做正确，又要经过若干年的开发和稳定。</p>
+<p>我现在比较好奇的是如果一开始就采用urcu+dpdk timer，理清这些基本问题，是否开发会更快一点？</p>
+</article>
+
+        </main><footer id="footer">
+    Copyright © 2020 Floating Minds Peng He
+</footer>
+</body>
+</html>

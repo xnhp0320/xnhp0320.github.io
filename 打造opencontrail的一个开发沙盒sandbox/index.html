@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Peng He&#39;s blog">
+    
+    <link rel="shortcut icon" href="https://xnhp0320.github.io/favicon.ico">
+    
+    <link rel="stylesheet" href="/css/style.min.css">
+
+    <title>打造OpenContrail的一个开发沙盒(sandbox)</title>
+</head>
+<body><header id="banner">
+    <h2><a href="https://xnhp0320.github.io">漂浮的思绪</a></h2>
+    <nav>
+        <ul>
+            
+            <li>
+                <a href="/" title="posts">posts</a>
+            </li>
+            
+            <li>
+                <a href="/about/" title="about">about</a>
+            </li>
+            
+        </ul>
+    </nav>
+</header>
+<main id="content">
+<article>
+    <header id="post-header">
+        <h1>打造OpenContrail的一个开发沙盒(sandbox)</h1><time>August 20, 2017</time></header><p>OpenContrail在中科院的时候接触过，那个时候还是个学生，书生气比较多（当然现在也很书生气）。当时觉得这玩意不够先进不够酷，其实就是没用OpenFlow，没用OVS，这两个潮流技术做数据面。到公司之后回过头来看，觉得真的是牛逼的不要不要的。</p>
+<p>SDN的精髓，真的在控制器上，而控制器的精髓，不在于用了什么OpenFlow的技术，而是用统一的模型，描述网络的行为，真正牛逼的控制器，哪怕底层是一堆硬件交换机，他照样能够打造一个你想要的虚拟网。这个控制器能够干netconf/BGP/RESTFUL，无论你想怎么做，都能把底层给你收拾的服服帖帖的。于是终于明白OpenDayLight为啥有百万行的代码量。相比之下，contrail的控制器貌似只有十来万行，算精简了。</p>
+<p>废话不多说了。今天找时间把OpenContrail的所有代码都down下来，想打造一个能跑的开发沙盒。记录下过程和踩的坑。</p>
+<p>首先是途径问题。有两个途径，一个是下载<a href="https://github.com/Juniper/contrail-installer">contrail-installer</a>，然后直接运行脚本，而是follow <a href="http://juniper.github.io/contrail-vnc/README.html">instructions</a>。之前选择的是第一种方法，但是被一个apt-get问题卡住了。后来选择了第二种方法，其实殊途同归，同样是需要解决这个apt-get的问题。下面主要说下第二种方法怎么搞。</p>
+<p>玩这种国外的大型开源软件（源代码有1.2G之大），最大的问题其实在于墙。第二种方法的问题也确实在这里。一开始就要用google的repo工具来管理代码。但是repo工具的官方原版需要从googlecode上下载repo工具，于是就被卡住了。花了两三个小时来解决虚拟机翻墙问题，后来无意中找到一个网页可以不从googlecode上下代码，而可以从github上下代码，问题三分钟就解决了。</p>
+<p>然后就开始冗长的git clone，谢天谢地墙没把github给封了，不然国内的科研事业也会停滞好几年。中间出去打了两局游戏，回来的时候才发现下完。然后开始装一些安装包。我看了下，又卡在了apt-get问题上。</p>
+<p>这个问题主要是需要更高版本的lz4软件包，但是源里没有。这里学到两个有用的命令：</p>
+<p><code>apt-cache showpkg XXX</code></p>
+<p>可以看出该软件包有那几个源提供，分别提供什么版本。</p>
+<p><code>aptitude install XXX=Version</code></p>
+<p>安装特定的软件包。</p>
+<p>在网上特意找了一个高版本的lz4软件包，于是搞定了。就是这么简单。现在回过头来看，总结下就一条：</p>
+<ol>
+<li>采用国内的源是最好的，sohu的ubuntu源，豆瓣的pip源，然后github上的repo工具，完美。</li>
+</ol>
+<p>接下来开始编译了，估计要编好几个小时。看来入手一个台式机已经是折腾技术的刚需了。</p>
+</article>
+
+        </main><footer id="footer">
+    Copyright © 2020 Floating Minds Peng He
+</footer>
+</body>
+</html>

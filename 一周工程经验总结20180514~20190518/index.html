@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Peng He&#39;s blog">
+    
+    <link rel="shortcut icon" href="https://xnhp0320.github.io/favicon.ico">
+    
+    <link rel="stylesheet" href="/css/style.min.css">
+
+    <title>一周工程经验总结20180514~20190518</title>
+</head>
+<body><header id="banner">
+    <h2><a href="https://xnhp0320.github.io">漂浮的思绪</a></h2>
+    <nav>
+        <ul>
+            
+            <li>
+                <a href="/" title="posts">posts</a>
+            </li>
+            
+            <li>
+                <a href="/about/" title="about">about</a>
+            </li>
+            
+        </ul>
+    </nav>
+</header>
+<main id="content">
+<article>
+    <header id="post-header">
+        <h1>一周工程经验总结20180514~20190518</h1><time>May 18, 2018</time></header><p>改革进入深水区，公司进入技术深水区。
+本周有一下一些认识：</p>
+<ul>
+<li>本周对vhost enqueue做了去锁化优化。</li>
+</ul>
+<p>vswitch的设计独特的地方在于，需要考量物理网口RSS多队列和虚机网口的多队列之间的关系。一般来说，RSS的队列数和forwarding线程数是一致的，但是后端virtio的队列数却是用户自己可以配置的，另外，RSS用的哈希算法和virtio网口的多队列哈希算法不一定是一致的，vswitch送入virtio0队列的流的反向包可能从virtio1出来，从而有可能被另一个forwarding线程收到。这意味着整体流表可能要加锁。</p>
+<p>我们需要从virtio的代码和内核代码中寻找一些规律性的东西，从而达到最终的性能优化。</p>
+<p>本周进行的vhost优化，在于多线程收包后，做哈希，并对virito当前enabled的总队列数做求余，送入对应队列，一般来说需要对队列加锁，但是因为dpdk提供了mp的队列，可以使用无锁算法进行。对队列的consume则可以绑定在单一线程上进行。如下图所示：</p>
+<p><img src="https://res.cloudinary.com/xnhp0320/image/upload/v1547278266/blog/20180518.png" alt=""></p>
+<p>这实际上将RTC变成了一个SPL，收上来的包，实际上在soft fifo中进行了下一个部分的处理。</p>
+<p>因此在soft fifo往vhsot queue上送包的时候，如果送完包，soft fifo中的包还有，则必须不能丢掉这些包，因为这些包有可能是别的线程送过来的。多个线程的冲突点，则在soft fifo的enqueue中，采用无锁算法优化，应该比spinlock要好。</p>
+<ul>
+<li>
+<p>vswitch本质是一个IO密集型程序，大量包在enqueue/dequeue中进行。因此cache miss有60%之高，如果前期流表的查找更费的cache的话，整个程序的cache miss惨不忍睹。</p>
+</li>
+<li>
+<p>vswitch还需要对各个虚机的流量做简单调度，可以基于虚机本身的流量的历史数据进行判断，如果单次轮询所有的虚机dev，可能会导致没有更多的cpu轮询物理口。这是一个之前没有想到的问题。</p>
+</li>
+<li>
+<p>应用将数据包送到virito队列，而vswitch怎么将这些队列信息和流量信息结合？如何在内核+vswitch层面极大的benifit应用？这是vswitch设计的一个更深的考虑。类似于intel的ATR技术，将虚机进程的队列+vcpu核+vswitch的soft fifo的完全绑定。这个应该放在流记录中。</p>
+</li>
+<li>
+<p>virito是怎么选取队列的？虚机内核是如何use内核栈？RPS?iperf？这需要对系统更深的理解。</p>
+</li>
+<li>
+<p>dpdk最小堆分配的内存为128字节，64字节为malloc头，64字节是任何字节数都要对64字节对齐，因此最少64字节。</p>
+</li>
+</ul>
+</article>
+
+        </main><footer id="footer">
+    Copyright © 2020 Floating Minds Peng He
+</footer>
+</body>
+</html>

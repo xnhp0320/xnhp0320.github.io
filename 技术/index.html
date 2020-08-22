@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Peng He&#39;s blog">
+    
+    <link rel="shortcut icon" href="https://xnhp0320.github.io/favicon.ico">
+    
+    <link rel="stylesheet" href="/css/style.min.css">
+
+    <title>技术</title>
+</head>
+<body><header id="banner">
+    <h2><a href="https://xnhp0320.github.io">漂浮的思绪</a></h2>
+    <nav>
+        <ul>
+            
+            <li>
+                <a href="/" title="posts">posts</a>
+            </li>
+            
+            <li>
+                <a href="/about/" title="about">about</a>
+            </li>
+            
+        </ul>
+    </nav>
+</header>
+<main id="content">
+<article>
+    <header id="post-header">
+        <h1>技术</h1><time>May 26, 2019</time></header><p>很久没有写技术类的博客了。实际上从去年年底到现在最近写了不少有&quot;技术含量&quot;的代码：</p>
+<ul>
+<li>subTimer：一种区分流方向的timer设计</li>
+<li>RCU：思考了很多用户态的RCU实现，输出了一篇纯文字的博客，同时线下也分享了一次</li>
+<li>Lockless Cache Update：如何无锁更新快表的Cache？</li>
+</ul>
+<p>今天给subTimer加了点优化。subTimer有个问题就是如果单边timer超时，但是整体timer没有超时，还是不能调用超时函数，这些堆积的timer停留在LRU链表中，明明超时了又不能清掉，其实对run_timer的效率是个问题。今天想了一个办法，将这些单边超时的timer加入到一个INACTIVE的链表中，但又不调用超时函数，判断timer状态的时候，还是属于pending，但是run_timer的时候不会扫描这个链表，提升了效率，改动也不大。</p>
+<p>自己感觉还比较优雅。但是吧，现在感觉subTimer这种一个timer分为两个subTimer的设计，现在看还是有点复杂，尤其是timeout函数会被调用两遍，而且给同步造成了负担。这么看，似乎搞复杂了。</p>
+</article>
+
+        </main><footer id="footer">
+    Copyright © 2020 Floating Minds Peng He
+</footer>
+</body>
+</html>

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Peng He&#39;s blog">
+    
+    <link rel="shortcut icon" href="https://xnhp0320.github.io/favicon.ico">
+    
+    <link rel="stylesheet" href="/css/style.min.css">
+
+    <title>NFP:Enabling Network Function Parallelism in NFV</title>
+</head>
+<body><header id="banner">
+    <h2><a href="https://xnhp0320.github.io">漂浮的思绪</a></h2>
+    <nav>
+        <ul>
+            
+            <li>
+                <a href="/" title="posts">posts</a>
+            </li>
+            
+            <li>
+                <a href="/about/" title="about">about</a>
+            </li>
+            
+        </ul>
+    </nav>
+</header>
+<main id="content">
+<article>
+    <header id="post-header">
+        <h1>NFP:Enabling Network Function Parallelism in NFV</h1><time>August 27, 2017</time></header><p>较为粗略的读了一下这篇论文。</p>
+<p>论文主要分析了服务链中的不同NF之间的依赖关系，并利用依赖关系设计了一套编排系统，能够对NF运行自动并行化，加速服务链整体的处理吞吐。这个想法有点类似于CPU上的指令集并行的思想，如果两个指令之间并不存在任何依赖关系，CPU可以采用多发射的方式并行执行两个指令。</p>
+<p>论文对NF之前的依赖关系做了一个总结，分为Order，Priority和Position。Order表示两个NF之间必须序列化排布，Priority表示两个NF对同一个数据包的处理存在分歧，以哪个NF为主，Position则明确表明NF在整个服务链中的位置（last/first）。</p>
+<p>依赖性和数学里面偏序、图论中的拓扑排序等等关系密切。使用Order，Priority和Position这几个原语，可以很容易设计出一套算法，编排NF之间的关系，实现最大的并行化。</p>
+<p>##主要贡献</p>
+<p>对NF之间的依赖性及并行性进行了挖掘，对NFV系统的设计，具有一定的启发意义。</p>
+<p>论文作者有良好的系统设计的功底。实际上现代网络系统科研，拼的不是idea，而是设计和实现。</p>
+<p>##Limitations</p>
+<ol>
+<li>
+<p>为了更大的挖掘NF之间的依赖性，论文对NF对数据包的处理做了假设。这一点感觉在实际中很难站得住脚。例如论文图中认为iptables做的NF只对数据包有读操作而无写操作。这种对读写的判断很深刻的影响了NF并行性的挖掘。而这一点成立的前提只能是NFV系统的操作人员对每一个NF的实现了如指掌。NFV最终的商业模式目前不清晰，因此无法对这个前提是否成立做出判断。</p>
+</li>
+<li>
+<p>文中为了避免数据包的多次查找，似乎给每个数据包都attach一个metadata，存储很多自定义的字段，这样的设计只适合于所有NF都只在一台物理机上运行的情况。在实验部分，虽然论文宣称：<code>We evaluate NFP based on a testbed with a number of servers</code>，但是实现部分都围绕着单机虚拟化技术进行描述。如何保证数据包出了机器之后还能进入到另一个server同时进行操作，不清楚。</p>
+</li>
+<li>
+<p>本文的系统设计十分巧妙。采用container的技术，避开了繁琐的VM I/O的编码和性能开销，采用shared memory的方式，让所有container共享同一个内存，避免了SRIOV, VHOST-USER, VM2VM数据包传递的开销。采用NF RUNTIME的方式，让所有的NF必须link上到NF runtime上，避免了virtio等一系列麻烦的IO interface编码。同时，这些设计也意味着所有的NF必须开源且互相完全可信。</p>
+</li>
+</ol>
+<p>##题外话</p>
+<p>NFV系统的商业模式并不清晰：是一家公司独立设计所有的NF模块，掌握所有的NF源码，并且拥有自己的NF编排系统，还是重用云的一套系统，各家公司只是出自己的NF镜像，这两条路似乎和使用场景密切相关。目前来看，各种针对NF的调度和编排的研究都有一个假设：单NF的功能足够原子化，这一点靠近第一条路。而如果是各个公司出镜像的方式，显然是功能越全越好。</p>
+</article>
+
+        </main><footer id="footer">
+    Copyright © 2020 Floating Minds Peng He
+</footer>
+</body>
+</html>

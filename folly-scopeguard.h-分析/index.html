@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Peng He&#39;s blog">
+    
+    <link rel="shortcut icon" href="https://xnhp0320.github.io/favicon.ico">
+    
+    <link rel="stylesheet" href="/css/style.min.css">
+
+    <title>folly ScopeGuard.h 分析</title>
+</head>
+<body><header id="banner">
+    <h2><a href="https://xnhp0320.github.io">漂浮的思绪</a></h2>
+    <nav>
+        <ul>
+            
+            <li>
+                <a href="/" title="posts">posts</a>
+            </li>
+            
+            <li>
+                <a href="/about/" title="about">about</a>
+            </li>
+            
+        </ul>
+    </nav>
+</header>
+<main id="content">
+<article>
+    <header id="post-header">
+        <h1>folly ScopeGuard.h 分析</h1><time>July 2, 2017</time></header><p>先把folly/ScopeGuard.h的前118行放在这里：</p>
+<div class="highlight"><pre class="chroma"><code class="language-cpp" data-lang="cpp">
+<span class="k">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+
+<span class="k">class</span> <span class="nc">ScopeGuardImplBase</span> <span class="p">{</span>
+ <span class="k">public</span><span class="o">:</span>
+  <span class="kt">void</span> <span class="n">dismiss</span><span class="p">(</span><span class="p">)</span> <span class="k">noexcept</span> <span class="p">{</span>
+    <span class="n">dismissed_</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">template</span> <span class="o">&lt;</span><span class="k">typename</span> <span class="n">T</span><span class="o">&gt;</span>
+  <span class="n">FOLLY_ALWAYS_INLINE</span> <span class="k">static</span> <span class="kt">void</span> <span class="n">runAndWarnAboutToCrashOnException</span><span class="p">(</span>
+      <span class="n">T</span><span class="o">&amp;</span> <span class="n">function</span><span class="p">)</span> <span class="k">noexcept</span> <span class="p">{</span>
+    <span class="k">try</span> <span class="p">{</span>
+      <span class="n">function</span><span class="p">(</span><span class="p">)</span><span class="p">;</span>
+    <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="p">.</span><span class="p">.</span><span class="p">.</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">warnAboutToCrash</span><span class="p">(</span><span class="p">)</span><span class="p">;</span>
+      <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">terminate</span><span class="p">(</span><span class="p">)</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+ <span class="k">protected</span><span class="o">:</span>
+  <span class="n">ScopeGuardImplBase</span><span class="p">(</span><span class="p">)</span> <span class="k">noexcept</span> <span class="o">:</span> <span class="n">dismissed_</span><span class="p">(</span><span class="nb">false</span><span class="p">)</span> <span class="p">{</span><span class="p">}</span>
+
+  <span class="k">static</span> <span class="n">ScopeGuardImplBase</span> <span class="nf">makeEmptyScopeGuard</span><span class="p">(</span><span class="p">)</span> <span class="k">noexcept</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">ScopeGuardImplBase</span><span class="p">{</span><span class="p">}</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">template</span> <span class="o">&lt;</span><span class="k">typename</span> <span class="n">T</span><span class="o">&gt;</span>
+  <span class="k">static</span> <span class="k">const</span> <span class="n">T</span><span class="o">&amp;</span> <span class="n">asConst</span><span class="p">(</span><span class="k">const</span> <span class="n">T</span><span class="o">&amp;</span> <span class="n">t</span><span class="p">)</span> <span class="k">noexcept</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">t</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="kt">bool</span> <span class="n">dismissed_</span><span class="p">;</span>
+
+ <span class="k">private</span><span class="o">:</span>
+  <span class="k">static</span> <span class="kt">void</span> <span class="n">warnAboutToCrash</span><span class="p">(</span><span class="p">)</span> <span class="k">noexcept</span><span class="p">;</span>
+<span class="p">}</span><span class="p">;</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">typename</span> <span class="n">FunctionType</span><span class="o">&gt;</span>
+<span class="k">class</span> <span class="nc">ScopeGuardImpl</span> <span class="o">:</span> <span class="k">public</span> <span class="n">ScopeGuardImplBase</span> <span class="p">{</span>
+ <span class="k">public</span><span class="o">:</span>
+  <span class="k">explicit</span> <span class="n">ScopeGuardImpl</span><span class="p">(</span><span class="n">FunctionType</span><span class="o">&amp;</span> <span class="n">fn</span><span class="p">)</span> <span class="k">noexcept</span><span class="p">(</span>
+      <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">is_nothrow_copy_constructible</span><span class="o">&lt;</span><span class="n">FunctionType</span><span class="o">&gt;</span><span class="o">:</span><span class="o">:</span><span class="n">value</span><span class="p">)</span>
+      <span class="o">:</span> <span class="n">ScopeGuardImpl</span><span class="p">(</span>
+            <span class="n">asConst</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span><span class="p">,</span>
+            <span class="n">makeFailsafe</span><span class="p">(</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">is_nothrow_copy_constructible</span><span class="o">&lt;</span><span class="n">FunctionType</span><span class="o">&gt;</span><span class="p">{</span><span class="p">}</span><span class="p">,</span>
+                         <span class="o">&amp;</span><span class="n">fn</span><span class="p">)</span><span class="p">)</span> <span class="p">{</span><span class="p">}</span>
+
+  <span class="k">explicit</span> <span class="nf">ScopeGuardImpl</span><span class="p">(</span><span class="k">const</span> <span class="n">FunctionType</span><span class="o">&amp;</span> <span class="n">fn</span><span class="p">)</span> <span class="k">noexcept</span><span class="p">(</span>
+      <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">is_nothrow_copy_constructible</span><span class="o">&lt;</span><span class="n">FunctionType</span><span class="o">&gt;</span><span class="o">:</span><span class="o">:</span><span class="n">value</span><span class="p">)</span>
+      <span class="o">:</span> <span class="n">ScopeGuardImpl</span><span class="p">(</span>
+            <span class="n">fn</span><span class="p">,</span>
+            <span class="n">makeFailsafe</span><span class="p">(</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">is_nothrow_copy_constructible</span><span class="o">&lt;</span><span class="n">FunctionType</span><span class="o">&gt;</span><span class="p">{</span><span class="p">}</span><span class="p">,</span>
+                         <span class="o">&amp;</span><span class="n">fn</span><span class="p">)</span><span class="p">)</span> <span class="p">{</span><span class="p">}</span>
+
+  <span class="k">explicit</span> <span class="nf">ScopeGuardImpl</span><span class="p">(</span><span class="n">FunctionType</span><span class="o">&amp;</span><span class="o">&amp;</span> <span class="n">fn</span><span class="p">)</span> <span class="k">noexcept</span><span class="p">(</span>
+      <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">is_nothrow_move_constructible</span><span class="o">&lt;</span><span class="n">FunctionType</span><span class="o">&gt;</span><span class="o">:</span><span class="o">:</span><span class="n">value</span><span class="p">)</span>
+      <span class="o">:</span> <span class="n">ScopeGuardImpl</span><span class="p">(</span>
+            <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">move_if_noexcept</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span><span class="p">,</span>
+            <span class="n">makeFailsafe</span><span class="p">(</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">is_nothrow_move_constructible</span><span class="o">&lt;</span><span class="n">FunctionType</span><span class="o">&gt;</span><span class="p">{</span><span class="p">}</span><span class="p">,</span>
+                         <span class="o">&amp;</span><span class="n">fn</span><span class="p">)</span><span class="p">)</span> <span class="p">{</span><span class="p">}</span>
+
+  <span class="n">ScopeGuardImpl</span><span class="p">(</span><span class="n">ScopeGuardImpl</span><span class="o">&amp;</span><span class="o">&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="k">noexcept</span><span class="p">(</span>
+      <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">is_nothrow_move_constructible</span><span class="o">&lt;</span><span class="n">FunctionType</span><span class="o">&gt;</span><span class="o">:</span><span class="o">:</span><span class="n">value</span><span class="p">)</span>
+      <span class="o">:</span> <span class="n">function_</span><span class="p">(</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">move_if_noexcept</span><span class="p">(</span><span class="n">other</span><span class="p">.</span><span class="n">function_</span><span class="p">)</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// If the above line attempts a copy and the copy throws, other is
+</span><span class="c1"></span>    <span class="c1">// left owning the cleanup action and will execute it (or not) depending
+</span><span class="c1"></span>    <span class="c1">// on the value of other.dismissed_. The following lines only execute
+</span><span class="c1"></span>    <span class="c1">// if the move/copy succeeded, in which case *this assumes ownership of
+</span><span class="c1"></span>    <span class="c1">// the cleanup action and dismisses other.
+</span><span class="c1"></span>    <span class="n">dismissed_</span> <span class="o">=</span> <span class="n">other</span><span class="p">.</span><span class="n">dismissed_</span><span class="p">;</span>
+    <span class="n">other</span><span class="p">.</span><span class="n">dismissed_</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="o">~</span><span class="n">ScopeGuardImpl</span><span class="p">(</span><span class="p">)</span> <span class="k">noexcept</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">dismissed_</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">execute</span><span class="p">(</span><span class="p">)</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+ <span class="k">private</span><span class="o">:</span>
+  <span class="k">static</span> <span class="n">ScopeGuardImplBase</span> <span class="n">makeFailsafe</span><span class="p">(</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">true_type</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span><span class="o">*</span><span class="p">)</span> <span class="k">noexcept</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="nf">makeEmptyScopeGuard</span><span class="p">(</span><span class="p">)</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">template</span> <span class="o">&lt;</span><span class="k">typename</span> <span class="n">Fn</span><span class="o">&gt;</span>
+  <span class="k">static</span> <span class="k">auto</span> <span class="n">makeFailsafe</span><span class="p">(</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">false_type</span><span class="p">,</span> <span class="n">Fn</span><span class="o">*</span> <span class="n">fn</span><span class="p">)</span> <span class="k">noexcept</span>
+      <span class="o">-</span><span class="o">&gt;</span> <span class="n">ScopeGuardImpl</span><span class="o">&lt;</span><span class="k">decltype</span><span class="p">(</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">ref</span><span class="p">(</span><span class="o">*</span><span class="n">fn</span><span class="p">)</span><span class="p">)</span><span class="o">&gt;</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">ScopeGuardImpl</span><span class="o">&lt;</span><span class="k">decltype</span><span class="p">(</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">ref</span><span class="p">(</span><span class="o">*</span><span class="n">fn</span><span class="p">)</span><span class="p">)</span><span class="o">&gt;</span><span class="p">{</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">ref</span><span class="p">(</span><span class="o">*</span><span class="n">fn</span><span class="p">)</span><span class="p">}</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">template</span> <span class="o">&lt;</span><span class="k">typename</span> <span class="n">Fn</span><span class="o">&gt;</span>
+  <span class="k">explicit</span> <span class="n">ScopeGuardImpl</span><span class="p">(</span><span class="n">Fn</span><span class="o">&amp;</span><span class="o">&amp;</span> <span class="n">fn</span><span class="p">,</span> <span class="n">ScopeGuardImplBase</span><span class="o">&amp;</span><span class="o">&amp;</span> <span class="n">failsafe</span><span class="p">)</span>
+      <span class="o">:</span> <span class="n">ScopeGuardImplBase</span><span class="p">{</span><span class="p">}</span><span class="p">,</span> <span class="n">function_</span><span class="p">(</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">forward</span><span class="o">&lt;</span><span class="n">Fn</span><span class="o">&gt;</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">failsafe</span><span class="p">.</span><span class="n">dismiss</span><span class="p">(</span><span class="p">)</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span><span class="o">*</span> <span class="k">operator</span> <span class="nf">new</span><span class="p">(</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">size_t</span><span class="p">)</span> <span class="o">=</span> <span class="k">delete</span><span class="p">;</span>
+
+  <span class="kt">void</span> <span class="nf">execute</span><span class="p">(</span><span class="p">)</span> <span class="k">noexcept</span> <span class="p">{</span>
+    <span class="n">runAndWarnAboutToCrashOnException</span><span class="p">(</span><span class="n">function_</span><span class="p">)</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">FunctionType</span> <span class="n">function_</span><span class="p">;</span>
+<span class="p">}</span><span class="p">;</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">typename</span> <span class="n">FunctionType</span><span class="o">&gt;</span>
+<span class="n">ScopeGuardImpl</span><span class="o">&lt;</span><span class="k">typename</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">decay</span><span class="o">&lt;</span><span class="n">FunctionType</span><span class="o">&gt;</span><span class="o">:</span><span class="o">:</span><span class="n">type</span><span class="o">&gt;</span>
+<span class="n">makeGuard</span><span class="p">(</span><span class="n">FunctionType</span><span class="o">&amp;</span><span class="o">&amp;</span> <span class="n">fn</span><span class="p">)</span> <span class="k">noexcept</span><span class="p">(</span>
+    <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">is_nothrow_constructible</span><span class="o">&lt;</span><span class="k">typename</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">decay</span><span class="o">&lt;</span><span class="n">FunctionType</span><span class="o">&gt;</span><span class="o">:</span><span class="o">:</span><span class="n">type</span><span class="p">,</span>
+                                  <span class="n">FunctionType</span><span class="o">&gt;</span><span class="o">:</span><span class="o">:</span><span class="n">value</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">ScopeGuardImpl</span><span class="o">&lt;</span><span class="k">typename</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">decay</span><span class="o">&lt;</span><span class="n">FunctionType</span><span class="o">&gt;</span><span class="o">:</span><span class="o">:</span><span class="n">type</span><span class="o">&gt;</span><span class="p">(</span>
+      <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">forward</span><span class="o">&lt;</span><span class="n">FunctionType</span><span class="o">&gt;</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span><span class="p">)</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div><p>ScopeGuard用于实现Go语言中defer的功能。其主要思想和ScopeLock类似，即利用C++栈展开机制——C++ runtime会对scope抛出异常之前定义的栈上对象进行逐个析构——达到出现异常时能够正常回滚的功能。scopeGuard本身定义了一个类，并在类的析构函数中注册一个回调函数，如果没有异常出现，在Guard对象销毁前，调用dismiss()，使对象销毁时不调用该函数，当异常发生时，该对象的析构函数会执行回调函数来进行某些回滚操作。</p>
+<p>但这段代码远比想象中的复杂。因为scopeGuard本身也是一个对象，其构造函数本身也可能会出现异常，为了避免这一点，folly采用了一个很巧妙的方式，利用同样的代码给ScopeGuard的构造函数构造ScopeGuard（相当的绕啊），使得即使ScopeGuard构造失败了，依旧会调用回调函数。下面做一点分析。</p>
+<p>首先，对ScopeGuardImpl设计了接受三种不同值的构造函数：1，非const左值，2，const左值或者右值，3，非const右值，对这些情况下的函数对象做不同处理，每次处理都会调用makeFailSafe，而makeFailSafe使用了tag-dispatch，对于函数对象的构造时是否会抛出异常做了区分，一般情况下，构造函数不抛出异常，那么调用简单版本：</p>
+<div class="highlight"><pre class="chroma"><code class="language-cpp" data-lang="cpp"><span class="n">ScopeGuardImplBase</span> <span class="n">makeFailsafe</span><span class="p">(</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">true_type</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span><span class="o">*</span><span class="p">)</span> <span class="k">noexcept</span>
+</code></pre></div><p>简单版本仅仅构造一个empty的ScopeGuardBase基类，不做任何操作，针对构造函数抛出异常的版本，makeFailSafe会采用别的方式重新构造一个ScopeGuardImpl对象：</p>
+<div class="highlight"><pre class="chroma"><code class="language-cpp" data-lang="cpp"> <span class="k">auto</span> <span class="n">makeFailsafe</span><span class="p">(</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">false_type</span><span class="p">,</span> <span class="n">Fn</span><span class="o">*</span> <span class="n">fn</span><span class="p">)</span> <span class="k">noexcept</span>
+      <span class="o">-</span><span class="o">&gt;</span> <span class="n">ScopeGuardImpl</span><span class="o">&lt;</span><span class="k">decltype</span><span class="p">(</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">ref</span><span class="p">(</span><span class="o">*</span><span class="n">fn</span><span class="p">)</span><span class="p">)</span><span class="o">&gt;</span>
+</code></pre></div><p>该对象如果构造失败，也会重新调用函数对象进行回滚。</p>
+<p>绝大多数情况下调用逻辑：</p>
+<pre><code>makeGuard -&gt; 
+	ScopeGuardImpl(FunctionType &amp;&amp;fn) -&gt; 
+		(不一定调用的是非const右值版本，此处仅仅来拿举例）
+		ScopeGuardImpl(Fn &amp;&amp;, ScopeGuardBase &amp;&amp;) -&gt; 
+			makeFailSafe (std::true_type version)
+			构造成功		
+</code></pre><p>复杂调用逻辑：</p>
+<pre><code>makeGuard -&gt; 
+	ScopeGuardImpl(FunctionType &amp;&amp;fn) -&gt; 
+		ScopeGuardImpl(Fn &amp;&amp;, ScopeGuardBase &amp;&amp;) -&gt; 
+			makeFailSafe (std::false_type version) -&gt;
+				(因为参数是std::ref(*fn)，必定是个右值) 
+				ScopeGuardImpl(FunctionType &amp;&amp;fn) -&gt;
+					ScopeGuardImpl(Fn &amp;&amp;, ScopeGuardBase &amp;&amp;) -&gt; 
+						makeFailSafe(std::true_type version) -&gt;
+						无异常
+			 makeFailSafe构造的对象调用dismiss
+		构造成功
+</code></pre><p>简单调用逻辑没什么好说的，主要是复杂调用逻辑，用了一个我不是很理解的方式对fn对象做了封装。为了对此进行研究，我写一个简单的functor：</p>
+<div class="highlight"><pre class="chroma"><code class="language-cpp" data-lang="cpp"><span class="k">class</span> <span class="nc">functor</span><span class="p">{</span>
+
+<span class="k">public</span><span class="o">:</span>
+    <span class="n">functor</span><span class="p">(</span><span class="p">)</span> <span class="k">noexcept</span><span class="p">(</span><span class="nb">false</span><span class="p">)</span> <span class="p">{</span>
+    <span class="p">}</span>
+
+    <span class="n">functor</span><span class="p">(</span><span class="k">const</span> <span class="n">functor</span> <span class="o">&amp;</span><span class="p">)</span> <span class="k">noexcept</span><span class="p">(</span><span class="nb">false</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="p">}</span>
+
+    <span class="n">functor</span><span class="p">(</span><span class="n">functor</span> <span class="o">&amp;</span><span class="o">&amp;</span><span class="p">)</span> <span class="k">noexcept</span><span class="p">(</span><span class="nb">false</span><span class="p">)</span> <span class="p">{</span>
+    <span class="p">}</span>
+
+    <span class="kt">void</span> <span class="nf">operator</span><span class="p">(</span><span class="p">)</span> <span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="sa"></span><span class="s">&#34;</span><span class="s">exit called</span><span class="s">&#34;</span><span class="o">&lt;</span><span class="o">&lt;</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span><span class="p">;</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="n">f</span> <span class="o">=</span> <span class="n">functor</span><span class="p">(</span><span class="p">)</span><span class="p">;</span>
+	<span class="k">auto</span> <span class="n">guard</span> <span class="o">=</span> <span class="n">folly</span><span class="o">:</span><span class="o">:</span><span class="n">makeGuard</span><span class="p">(</span><span class="n">f</span><span class="p">)</span><span class="p">;</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+</code></pre></div><p>编译方式：</p>
+<pre><code>g++ scope_guard.cc -std=c++11 -g -O0 -lfolly
+</code></pre><p>在functor的拷贝和移动构造函数中特别声明了该函数可能会抛出异常。通过gdb跟踪可以发现以下几个现象：</p>
+<ol>
+<li>f是非const左值，因此调用<code>explicit ScopeGuardImpl(FunctionType&amp; fn) noexcept</code></li>
+<li>makefailSafe调用false_type版本。</li>
+<li>在makefailSafe中使用std::ref构造一个右值对象，std::ref<functor>(*fn)。</li>
+<li>std::ref为右值，因此调用非const右值版本的ScopeGuardImpl。</li>
+<li>std::ref的构造函数为noexcept，因此右值版本的ScopeGuardImpl调用makeFailSafe，这次会使用true_type版本，构造一个空的Base对象，这个对象仅仅是为了备用的备用。即为了上一次makeFailSafe构造出来一个Scope，因为这个不会抛出异常，因此该对象为空。</li>
+<li>在ScopeGuard构造期间所构造的ScopeGuard的ScopeGuard（很绕），其Fn类型为std::reference_wrapper<functor>，并且其构造函数是没有异常抛出的，因此成功的绕过了functor构造时的异常检查。</li>
+</ol>
+<p>尝试在functor的copy/move构造函数中抛出异常，结果并没有调用ScopeGuardImpl注册的函数，而是直接退出了。</p>
+<p>那么在ScopeGuard中构造另一个ScopeGuard是为了什么？</p>
+<p>答案是，你必须处理这个构造函数中抛出的异常，注册的函数才能得以执行。将代码改成如下形式：</p>
+<div class="highlight"><pre class="chroma"><code class="language-cpp" data-lang="cpp"><span class="k">class</span> <span class="nc">functor</span><span class="p">{</span>
+
+<span class="k">public</span><span class="o">:</span>
+    <span class="kt">int</span> <span class="o">&amp;</span><span class="n">_exec</span><span class="p">;</span>
+
+    <span class="n">functor</span><span class="p">(</span><span class="kt">int</span> <span class="o">&amp;</span><span class="n">exec</span><span class="p">)</span><span class="o">:</span> <span class="n">_exec</span><span class="p">(</span><span class="n">exec</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="p">}</span>
+
+    <span class="n">functor</span><span class="p">(</span><span class="k">const</span> <span class="n">functor</span> <span class="o">&amp;</span><span class="n">other</span><span class="p">)</span> <span class="k">noexcept</span><span class="p">(</span><span class="nb">false</span><span class="p">)</span> <span class="o">:</span> <span class="n">_exec</span><span class="p">(</span><span class="n">other</span><span class="p">.</span><span class="n">_exec</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span><span class="o">&lt;</span><span class="o">&lt;</span><span class="sa"></span><span class="s">&#34;</span><span class="s">copy construct</span><span class="s">&#34;</span><span class="o">&lt;</span><span class="o">&lt;</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
+        <span class="k">throw</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">runtime_error</span><span class="p">(</span><span class="sa"></span><span class="s">&#34;</span><span class="s">whoa</span><span class="s">&#34;</span><span class="p">)</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="kt">void</span> <span class="nf">operator</span><span class="p">(</span><span class="p">)</span> <span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span><span class="o">&lt;</span><span class="o">&lt;</span><span class="sa"></span><span class="s">&#34;</span><span class="s">exit called</span><span class="s">&#34;</span><span class="o">&lt;</span><span class="o">&lt;</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
+        <span class="n">_exec</span><span class="o">+</span><span class="o">+</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span><span class="p">;</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">a</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="k">try</span> <span class="p">{</span>
+        <span class="k">auto</span> <span class="n">guard</span> <span class="o">=</span> <span class="n">folly</span><span class="o">:</span><span class="o">:</span><span class="n">makeGuard</span><span class="p">(</span><span class="n">functor</span><span class="p">(</span><span class="n">a</span><span class="p">)</span><span class="p">)</span><span class="p">;</span>
+    <span class="p">}</span><span class="k">catch</span><span class="p">(</span><span class="p">.</span><span class="p">.</span><span class="p">.</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="p">}</span>
+
+    <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="n">a</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div><p>会发现，最终a的值变成1，并且会有exit called被打印。</p>
+<p>如果把构造函数改成noexcept，会有什么问题？
+答案是Guard不会为ScopeGuard的构造函数构造ScopeGuard，此时ScopeGuard构造时发生的异常将不会被try-catch捕捉，而程序崩溃。</p>
+<p>##总结</p>
+<ul>
+<li>
+<p>构造函数如果不会抛出异常，可以标记上noexcept，这样很多库代码不会为了安全生成特殊代码，能够提高程序执行效率。C++默认构造函数为noexcept(false)。</p>
+</li>
+<li>
+<p>为了避免在构造ScopeGuard的ScopeGuard时出现异常，folly用了一系列类型变化，</p>
+<ul>
+<li>首先makeGuard用universal reference接受所有的函数类型。</li>
+<li>然后利用函数重载，将函数类型分为1. 非const左值，2. const左值或右值， 3. 非const右值三种：</li>
+</ul>
+<div class="highlight"><pre class="chroma"><code class="language-cpp" data-lang="cpp"> <span class="k">explicit</span> <span class="n">ScopeGuardImpl</span><span class="p">(</span><span class="n">FunctionType</span><span class="o">&amp;</span> <span class="n">fn</span><span class="p">)</span> <span class="k">noexcept</span>
+ <span class="k">explicit</span> <span class="n">ScopeGuardImpl</span><span class="p">(</span><span class="k">const</span> <span class="n">FunctionType</span><span class="o">&amp;</span> <span class="n">fn</span><span class="p">)</span> <span class="k">noexcept</span>
+ <span class="k">explicit</span> <span class="n">ScopeGuardImpl</span><span class="p">(</span><span class="n">FunctionType</span><span class="o">&amp;</span><span class="o">&amp;</span> <span class="n">fn</span><span class="p">)</span> <span class="k">noexcept</span>
+</code></pre></div><pre><code> 然而，需要说明的是无论fn的类型是什么，fn本身是一个左值！因此&amp;fn是一个左值的指针，此时把传入makeFailSafe的变量指针统一为一个左值指针。
+   
+ * 最后用std::ref(*fn)这种方式，把传入的对象类型统一为一个左值引用。因此，无论你用什么方式传入对象，最后都是一个左值引用！甚至你传入一个temp的右值对象，最后也变成了一个左值引用，这样，在构造函数时，就不会出现异常！比如你可以这么玩：
+
+     ```cpp
+     auto guard = makeGuard(functor());
+     ```	
+
+ * 在C++中，右值引用是一种类型，但是变量本身是左值，这很容易让人困惑，比如以下代码是成立的：
+
+     ```cpp
+     int &amp;&amp; a = 1;
+     *(&amp;a) = 2;
+     a = 3; 	
+     ```
+
+ a本身是一个左值，其类型为右值引用。
+
+</code></pre></li>
+<li>
+<p>C++允许使用const T&amp; 指向一个const的右值。比如这么用：</p>
+<p><code>const std::string&amp; s = &quot;hahaha&quot;;</code></p>
+<p>首先C++会使用拷贝构造函数创建一个临时对象std::string(&ldquo;hahaha&rdquo;)，然后让左值引用指向这个临时对象，右值。
+但是不能这么用：</p>
+<p><code>std::string &amp;s = &quot;hahaha&quot;;</code></p>
+<p>因为临时对象是随时会消失的，最好别改。</p>
+<p>但是既然是const的右值，你不能改变他什么。因此不能实现move语义。这也是使用右值引用的源头，实际上右值引用的说法不准确，应该是非const右值引用。</p>
+<p>这里引入了一个奇怪的悖论。C++禁止对右值做左值引用，那么上面貌似用std::ref(*fn)的方式成功的将一个右值变成了左值引用？</p>
+<p>我尝试了以下方法，还成功了：</p>
+<div class="highlight"><pre class="chroma"><code class="language-cpp" data-lang="cpp"><span class="k">auto</span> <span class="nf">transform</span><span class="p">(</span><span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">string</span> <span class="o">&amp;</span><span class="o">&amp;</span> <span class="n">a</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="o">&amp;</span><span class="n">a</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">ref</span><span class="p">(</span><span class="n">a</span><span class="p">)</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="p">)</span> 
+<span class="p">{</span>
+  
+    <span class="k">auto</span> <span class="n">a</span> <span class="o">=</span> <span class="n">transform</span><span class="p">(</span><span class="sa"></span><span class="s">&#34;</span><span class="s">hahaha</span><span class="s">&#34;</span><span class="p">)</span><span class="p">;</span>
+    <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">string</span> <span class="o">&amp;</span><span class="n">r</span> <span class="o">=</span> <span class="n">a</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="p">)</span><span class="p">;</span>
+    <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="o">&amp;</span><span class="n">r</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
+    <span class="n">r</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="sa"></span><span class="sc">&#39;</span><span class="sc">b</span><span class="sc">&#39;</span><span class="p">;</span>
+    <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">cout</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="n">r</span> <span class="o">&lt;</span><span class="o">&lt;</span> <span class="n">std</span><span class="o">:</span><span class="o">:</span><span class="n">endl</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div><pre><code> 这里``hahaha``明显是一个右值，但是却使用ref的方式成功变成了一个左值，r。还可以对这个左值进行修改。此处存疑。
+
+
+</code></pre></li>
+<li>
+<p>当传入的类型非常复杂，有可能有const T&amp;, T&amp;, T时，可以使用std::decay去繁就简，std::decay&lt;T&gt;::type只是一个T。</p>
+</li>
+</ul>
+</article>
+
+        </main><footer id="footer">
+    Copyright © 2020 Floating Minds Peng He
+</footer>
+</body>
+</html>

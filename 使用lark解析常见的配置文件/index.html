@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Peng He&#39;s blog">
+    
+    <link rel="shortcut icon" href="https://xnhp0320.github.io/favicon.ico">
+    
+    <link rel="stylesheet" href="/css/style.min.css">
+
+    <title>使用Lark解析常见的配置文件</title>
+</head>
+<body><header id="banner">
+    <h2><a href="https://xnhp0320.github.io">漂浮的思绪</a></h2>
+    <nav>
+        <ul>
+            
+            <li>
+                <a href="/" title="posts">posts</a>
+            </li>
+            
+            <li>
+                <a href="/about/" title="about">about</a>
+            </li>
+            
+        </ul>
+    </nav>
+</header>
+<main id="content">
+<article>
+    <header id="post-header">
+        <h1>使用Lark解析常见的配置文件</h1><time>July 22, 2017</time></header><p>最近公司上线新的软件，和老软件相比，配置文件有一些变化，这使得灰度的机器上的老配置文件不再适用，因而产生了一个新问题。如何将老配置文件转换成新的配置文件？本来这个并不是什么大问题，主要是对配置文件的语法解析比较麻烦。新老配置文件都是自定义了一种简单的语法，不是常见的json或者XML。软件内部解析这种配置文件也是手写了一个解析器。因此，需要手写一个转化脚本。我一直对这种解析很感兴趣，于是用python做了一个。</p>
+<p>##选库
+工欲善其事，必先利其器。用Python写的，支持特定文法的parser generator很多。我用了<a href="https://github.com/erezsh/lark">Lark</a>，选择的原因其实很简单，文档比较全，看起来貌似很容易。一些专业的库一上来搞出一堆编译原理的术语，一般会吓退很多初学者。像我这种略知一二的自然只能放弃。Lark这个库我看了下，整体代码才2000行，小，而且最近一次commit是2017年，新，最关键的一点是，文档tutorial做的挺好，例子够全。所以就用他了。</p>
+<p>##Rules
+写这种parser generator的关键是先写好BNF的语法文件。这是我第一次写，试了很多次才成功。首先简单的介绍下配置文件的语法：</p>
+<pre><code>block valueA valueB valueC {
+   key value
+   block valueD valueE {
+   	
+   }
+   ....
+}
+</code></pre><p>其本质上就是一个block里面的key value对，block里面能够嵌套block。第一次用BNF，试了好久。主要有几个问题：</p>
+<ol>
+<li>
+<p>block的头部有不同的格式，比如block IP proto port 是一种，定义一个service，还有block IP port是另一种，定义一个real server。看到这两个术语，我估计有人已经猜到这一款什么软件了。</p>
+</li>
+<li>
+<p>语法解析的时候到底是否需要ignore whitspace么？这一点是借鉴了Lark自带的对Python语言解析的语法文件。我看他解析的时候都忽略了空格，那我这个简单的语法岂不是更可以忽略whitespace？</p>
+</li>
+<li>
+<p>如果选择忽略whitespace，问题就来了。key value这两个token就不好定义了。我本来觉得key应该定义成/[a-zA-Z-_]+/就可以了，结果发现有些key中还有数字。但是如果数字加上，这个key的正则表达式会直接吞掉value，因为忽略到空格之后key和value的定义几乎一致了，那么当parser设计的比较贪婪的时候，key本身的正则表达式就会把一行里面的key/value都吞掉。</p>
+</li>
+</ol>
+<p>最终的解决方式是采用更精确的定义去做BNF。比如为每一种block做更精确的定义，我采用了比较笨的方法，因为反正整个配置文件就四种block，我每个都定义了一种。最终的配置文件：</p>
+<pre><code>conf : vs_block*
+vs_block : vs_head &quot;{&quot; vs_body* &quot;}&quot; _NEWLINE
+vs_head : &quot;virtual_server&quot; proto ip port
+tcp : &quot;TCP&quot; | &quot;tcp&quot;
+udp : &quot;UDP&quot; | &quot;udp&quot;
+proto : tcp | udp
+ip : /\d+\.\d+\.\d+\.\d+/
+port : INT
+
+?vs_body: stmt
+        | topt_block
+        | ttout_block
+        | rs_block
+        | check_type_block
+        | _NEWLINE
+
+?stmt : key value
+string : /[2A-Za-z-_]+/
+key : string
+svc_name : /\d+\.\d+\.\d+\.\d+\_(TCP|UDP)\_\d+/
+mac_addr : /\d{2}:\d{2}:\d{2}:\d{2}:\d{2}:\d{2}/
+value : INT | string | svc_name | mac_addr
+
+topt_block : topt_head &quot;{&quot; body* &quot;}&quot; _NEWLINE
+topt_head : &quot;tcp_option&quot;
+
+?body : stmt
+      | _NEWLINE
+
+ttout_block : ttout_head &quot;{&quot; body* &quot;}&quot; _NEWLINE
+ttout_head : &quot;tcp_timeout&quot;
+
+rs_block : rs_head &quot;{&quot; body* &quot;}&quot; _NEWLINE
+rs_head : &quot;real_server&quot; ip port
+
+check_type_block : ct_head &quot;{&quot; _NEWLINE &quot;}&quot; _NEWLINE
+ct_head : &quot;check_type&quot; proto
+
+
+_NEWLINE : /\r?\n[\t ]*/
+%import common.INT
+%ignore  /[\t \f]+/
+</code></pre><p>整个配置文件可以看成是vs配置块的列表，每个vs配置块中由stmt，*_block（各种block），和_NEWLINE组成。每一种block我都定死了他的block_head，其实现在来看这里可以把block定义成也一个统一的block_head，然后在block_head中细分他的类型，比如可以这样：</p>
+<pre><code>block : block_head &quot;{&quot; block_body* &quot;}&quot; _NEWLINE
+block_head : &quot;real_server&quot; ip port            -&gt; rs_head
+             | &quot;virtual_server&quot; proto ip port -&gt; vs_head
+             | ....
+block_body : stmt 
+             | _NEWLINE
+</code></pre><p>但是写的时候对整个BNF的玩法还不是很熟，所以直接写死了四种，有点sb。所以说抽象是软件设计中最最重要的能力。</p>
+<p>一个经验：</p>
+<p><strong>如果有不知道如何用正则精确定义token，那就为他可能出现的不同种类分别定义</strong>
+比如语法文件中的value的定义，就有INT, string，svc_name, mac_addr等四种类型，每个类型的正则尽量写的精确，比如mac_addr使用了\d{2}这种严格匹配。</p>
+<p>##LALR算法
+Lark采用的是lalr的parse算法。我在wiki上查了下，LA表示look ahead，就是在parse的时候比较激进，追求效率。LR表示的是语法文件从左往右(L)，而语法解析从右往左(R)。所以先从每条Rules的最后一个token开始匹配。这个特质对于理解写代码过程中出现的解析失败极其有用。</p>
+<p>##Transformer
+当生成了AST之后，需要遍历AST获得信息，然后翻译成另一种语言。Lark中的Transformer类正好是干这个的。</p>
+<p>这里又有一个坑，就是每次遍历的时候，由于采用的是递归算法，都是先遍历到叶子节点，调用叶子节点的回调函数，然后回到父亲节点，调用回调函数的。因此对于特定的parse，考虑到后续结构化的需求，在写BNF的时候，就需要考虑把特定信息设置成树的一个分支，把其他信息作为树的另一个分支。</p>
+<p>比如我刚才提出的block_head和block_body的分割，就把head和body分成了block节点的两个分支，那么在遍历AST的时候，当经过树的head的分支时，可以创建一个表示整个block的一个对象，而在树的body分支，可以将每个stmt定义的keyvalue对放入刚才创建的block对象内部。这样，整个parse的过程就好比做了一个栈，解析head的时候初始化一个对象放在栈顶部，接下里解析body的时候，把keyvalue当做栈顶部对象的属性，放在栈顶部对象的dict中即可。</p>
+<p>当AST遍历完毕，在栈中放置的所有对象也就正好解析完毕了。</p>
+<p>##一点想法
+这个年代，开源的东西不要太多。一个牛逼的工程师，除了代码写的好以外，文档做得好，写作能力高，简直就是胜负手。在选择Lark之前，我还用了一个库，Grako，看起来也很高级，无奈例子都太高深，完全不照顾新人，立马放弃。我做完这个python工具后还专门去Lark的作者blog给他留言，对他表示感谢。</p>
+</article>
+
+        </main><footer id="footer">
+    Copyright © 2020 Floating Minds Peng He
+</footer>
+</body>
+</html>

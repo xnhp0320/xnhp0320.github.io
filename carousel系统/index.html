@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Peng He&#39;s blog">
+    
+    <link rel="shortcut icon" href="https://xnhp0320.github.io/favicon.ico">
+    
+    <link rel="stylesheet" href="/css/style.min.css">
+
+    <title>Carousel系统</title>
+</head>
+<body><header id="banner">
+    <h2><a href="https://xnhp0320.github.io">漂浮的思绪</a></h2>
+    <nav>
+        <ul>
+            
+            <li>
+                <a href="/" title="posts">posts</a>
+            </li>
+            
+            <li>
+                <a href="/about/" title="about">about</a>
+            </li>
+            
+        </ul>
+    </nav>
+</header>
+<main id="content">
+<article>
+    <header id="post-header">
+        <h1>Carousel系统</h1><time>May 6, 2018</time></header><p>花了一天慢悠悠的看完了Carousel的论文，经常看着看着就睡着了，还好换了把椅子，能够躺着看，还蛮惬意的。</p>
+<p>Carousel，意为旋转木马，是Google的限速系统，主要应对流量分类越来越多，现有限速器实现CPU占用率高提出的一套优化实现方案。其中采用了Timing Wheel作包缓存，单核单队列，实现方法极其简单。</p>
+<p>论文首先对比了，Policer、HTB、FQ/Pacing三种限速器。其中最高效的就是policer，这个就是常用的token bucket 限速器，超过bucket就丢弃数据包，这种限速器不需要缓存，最省cpu，但缺点也在于不准，以及对burst不友好。FQ/pacing和HTB限速准，但CPU占用率高。</p>
+<p>Carousel具体算法非常简单，基本还是HTB的一个变种：每个限速器维护一个timestamp，每个包经过时，按照限速器的速率给timestamp做一个递增；当一个包经过所有的限速器之后，将他所经过的所有timestamp中最大的作为包的timestamp，该timestamp表示包的发出时间；将数据包按照其timestamp插入到timing wheel中；timimg wheel随时间的进行，每次清掉一个slots下所有数据包发出，每个slots是一个链表，挂着timestamp落在这个slots中的包。</p>
+<p>记一些零散的点：</p>
+<ol>
+<li>Google居然会在Production的服务器上做一些实地性能测量</li>
+<li>Qdisc全局锁，在忙的服务器，一天，95th百分位开销是1s</li>
+<li>Google采用了SoftNIC的设计，网卡的特性使用软件硬件混合实现，给上层应用提供一个比较固定的API接口。SoftNIC采用了轮询的设计，在固定的核上进行，类似于一个vswitch。如果嫌弃内核实现的低效：比如iptables，比如限速，可以挪到SoftNIC/vswitch上实现。这是一个用户态和内核态兼顾的思路，值得借鉴。</li>
+<li>流控可以给网络栈进行反压。在vswitch中，可以通过延迟数据包发送完成的方式，给上层应用进行反压，但这个可能需要对virtio的实现做一些修改。</li>
+<li>可以试试google的网络测试benchmarking，<a href="https://github.com/google/neper">neper</a></li>
+</ol>
+</article>
+
+        </main><footer id="footer">
+    Copyright © 2020 Floating Minds Peng He
+</footer>
+</body>
+</html>
