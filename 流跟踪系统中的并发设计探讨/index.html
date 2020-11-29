@@ -66,56 +66,56 @@
     <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
 <span class="p">}</span>
 </code></pre></div><p>对于ipvs流表，内核使用了RCU来进行流表项的读写并发设计，但同时又使用了<code>__ip_vs_conn_get</code>函数对流表表项做引用计数，该函数的代码为：</p>
-<pre><code>static inline bool __ip_vs_conn_get(struct ip_vs_conn *cp)
-{
-    return refcount_inc_not_zero(&amp;cp-&gt;refcnt);
-}
-</code></pre><p>其中<code>refcount_inc_not_zero</code>是一个per cpu引用计数，暂时可以理解为 <code>atomic_inc_not_zero</code>。也就是说，如果引用计数不为0，那么就增加引用计数，如果为0，说明这个流表表项即将被回收，那么就让流表项不再能够被检索到。</p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="k">static</span> <span class="kr">inline</span> <span class="kt">bool</span> <span class="nf">__ip_vs_conn_get</span><span class="p">(</span><span class="k">struct</span> <span class="n">ip_vs_conn</span> <span class="o">*</span><span class="n">cp</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">return</span> <span class="n">refcount_inc_not_zero</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cp</span><span class="o">-</span><span class="o">&gt;</span><span class="n">refcnt</span><span class="p">)</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div><p>其中<code>refcount_inc_not_zero</code>是一个per cpu引用计数，暂时可以理解为 <code>atomic_inc_not_zero</code>。也就是说，如果引用计数不为0，那么就增加引用计数，如果为0，说明这个流表表项即将被回收，那么就让流表项不再能够被检索到。</p>
 <p>再来看看timer函数的骨架代码（省略了和流表无关的代码）：</p>
-<pre><code>static inline bool ip_vs_conn_unlink(struct ip_vs_conn *cp)
-{
-    unsigned int hash;
-    bool ret = false;
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="k">static</span> <span class="kr">inline</span> <span class="kt">bool</span> <span class="nf">ip_vs_conn_unlink</span><span class="p">(</span><span class="k">struct</span> <span class="n">ip_vs_conn</span> <span class="o">*</span><span class="n">cp</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">hash</span><span class="p">;</span>
+    <span class="kt">bool</span> <span class="n">ret</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
     
-    hash = ip_vs_conn_hashkey_conn(cp);
+    <span class="n">hash</span> <span class="o">=</span> <span class="n">ip_vs_conn_hashkey_conn</span><span class="p">(</span><span class="n">cp</span><span class="p">)</span><span class="p">;</span>
 
-    ct_write_lock_bh(hash);
-    spin_lock(&amp;cp-&gt;lock);
+    <span class="n">ct_write_lock_bh</span><span class="p">(</span><span class="n">hash</span><span class="p">)</span><span class="p">;</span>
+    <span class="n">spin_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cp</span><span class="o">-</span><span class="o">&gt;</span><span class="n">lock</span><span class="p">)</span><span class="p">;</span>
 
-    if (cp-&gt;flags &amp; IP_VS_CONN_F_HASHED) {
-        /* Decrease refcnt and unlink conn only if we are last user */
-        if (refcount_dec_if_one(&amp;cp-&gt;refcnt)) {
-            hlist_del_rcu(&amp;cp-&gt;c_list);
-            cp-&gt;flags &amp;= ~IP_VS_CONN_F_HASHED;
-            ret = true;
-        }
-    }
+    <span class="k">if</span> <span class="p">(</span><span class="n">cp</span><span class="o">-</span><span class="o">&gt;</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">IP_VS_CONN_F_HASHED</span><span class="p">)</span> <span class="p">{</span>
+        <span class="cm">/* Decrease refcnt and unlink conn only if we are last user */</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">refcount_dec_if_one</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cp</span><span class="o">-</span><span class="o">&gt;</span><span class="n">refcnt</span><span class="p">)</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">hlist_del_rcu</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cp</span><span class="o">-</span><span class="o">&gt;</span><span class="n">c_list</span><span class="p">)</span><span class="p">;</span>
+            <span class="n">cp</span><span class="o">-</span><span class="o">&gt;</span><span class="n">flags</span> <span class="o">&amp;</span><span class="o">=</span> <span class="o">~</span><span class="n">IP_VS_CONN_F_HASHED</span><span class="p">;</span>
+            <span class="n">ret</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
 
-    spin_unlock(&amp;cp-&gt;lock);
-    ct_write_unlock_bh(hash);
+    <span class="n">spin_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cp</span><span class="o">-</span><span class="o">&gt;</span><span class="n">lock</span><span class="p">)</span><span class="p">;</span>
+    <span class="n">ct_write_unlock_bh</span><span class="p">(</span><span class="n">hash</span><span class="p">)</span><span class="p">;</span>
 
-    return ret;
-}
-static void ip_vs_conn_expire(struct timer_list *t)
-{
-    struct ip_vs_conn *cp = from_timer(cp, t, timer);
-    struct netns_ipvs *ipvs = cp-&gt;ipvs;
+    <span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="k">static</span> <span class="kt">void</span> <span class="nf">ip_vs_conn_expire</span><span class="p">(</span><span class="k">struct</span> <span class="n">timer_list</span> <span class="o">*</span><span class="n">t</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">struct</span> <span class="n">ip_vs_conn</span> <span class="o">*</span><span class="n">cp</span> <span class="o">=</span> <span class="n">from_timer</span><span class="p">(</span><span class="n">cp</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">timer</span><span class="p">)</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">netns_ipvs</span> <span class="o">*</span><span class="n">ipvs</span> <span class="o">=</span> <span class="n">cp</span><span class="o">-</span><span class="o">&gt;</span><span class="n">ipvs</span><span class="p">;</span>
 
-    /* Unlink conn if not referenced anymore */
-    if (likely(ip_vs_conn_unlink(cp))) {
+    <span class="cm">/* Unlink conn if not referenced anymore */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">likely</span><span class="p">(</span><span class="n">ip_vs_conn_unlink</span><span class="p">(</span><span class="n">cp</span><span class="p">)</span><span class="p">)</span><span class="p">)</span> <span class="p">{</span>
        
-        /* delete the timer if it is activated by other users */
-        del_timer(&amp;cp-&gt;timer);
-        call_rcu(&amp;cp-&gt;rcu_head, ip_vs_conn_rcu_free);
-        return;
-    }
+        <span class="cm">/* delete the timer if it is activated by other users */</span>
+        <span class="n">del_timer</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cp</span><span class="o">-</span><span class="o">&gt;</span><span class="n">timer</span><span class="p">)</span><span class="p">;</span>
+        <span class="n">call_rcu</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cp</span><span class="o">-</span><span class="o">&gt;</span><span class="n">rcu_head</span><span class="p">,</span> <span class="n">ip_vs_conn_rcu_free</span><span class="p">)</span><span class="p">;</span>
+        <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span>
 
-    refcount_inc(&amp;cp-&gt;refcnt);
-    cp-&gt;timeout = 60*HZ;
+    <span class="n">refcount_inc</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cp</span><span class="o">-</span><span class="o">&gt;</span><span class="n">refcnt</span><span class="p">)</span><span class="p">;</span>
+    <span class="n">cp</span><span class="o">-</span><span class="o">&gt;</span><span class="n">timeout</span> <span class="o">=</span> <span class="mi">60</span><span class="o">*</span><span class="n">HZ</span><span class="p">;</span>
 
-    __ip_vs_conn_put_timer(cp);
-}
-</code></pre><p>可见，引用计数在此起到了主要作用，当引用计数为1时，说明目前流表只有一个引用，这个引用，就是哈希表本身，哈希表本身持有了对流表表项的引用，现在超时了，删除流表，于是引用为0，可以通过RCU系统安全释放掉这个流表表项资源。一旦引用计数不为1，那么就得必须重新激活timer，推迟流表资源的释放。</p>
+    <span class="n">__ip_vs_conn_put_timer</span><span class="p">(</span><span class="n">cp</span><span class="p">)</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div><p>可见，引用计数在此起到了主要作用，当引用计数为1时，说明目前流表只有一个引用，这个引用，就是哈希表本身，哈希表本身持有了对流表表项的引用，现在超时了，删除流表，于是引用为0，可以通过RCU系统安全释放掉这个流表表项资源。一旦引用计数不为1，那么就得必须重新激活timer，推迟流表资源的释放。</p>
 <h3 id="rcu和引用计数作用">RCU和引用计数作用</h3>
 <p>RCU在此处仅仅是保护哈希表的访问的并发性，但是并不保护流表表项的资源安全释放。从代码上看，每次读锁保护的区间，仅仅是哈希表查找的部分，一旦程序执行出了哈希表查找部分，则流表表项随时都有可能被timer系统给释放掉，此时，引用计数就派上了用场。</p>
 <p>可以说这是一个很完善的设计了。但是有几个问题可以思考：</p>
